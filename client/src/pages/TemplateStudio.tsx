@@ -25,6 +25,7 @@ type Template = {
   text: string;
   imageData: string;
   imageName: string;
+  createdAt?: number;
 };
 
 type TemplateStudioProps = {
@@ -89,12 +90,13 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       if (!saved) return;
       const parsed = JSON.parse(saved) as Template[];
       if (Array.isArray(parsed)) {
-        setTemplates(parsed);
-        if (parsed[0]) {
-          setActiveId(parsed[0].id);
-          setText(parsed[0].text);
-          setImageData(parsed[0].imageData);
-          setImageName(parsed[0].imageName);
+        const ordered = parsed.map((item, index) => ({ ...item, createdAt: item.createdAt || index + 1 })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setTemplates(ordered);
+        if (ordered[0]) {
+          setActiveId(ordered[0].id);
+          setText(ordered[0].text);
+          setImageData(ordered[0].imageData);
+          setImageName(ordered[0].imageName);
         }
       }
     } catch {
@@ -166,13 +168,13 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       text: text.trim(),
       imageData,
       imageName,
+      createdAt: activeTemplate?.createdAt || Date.now(),
     };
 
     setTemplates((current) => {
       const exists = current.some((item) => item.id === template.id);
-      return exists
-        ? current.map((item) => (item.id === template.id ? template : item))
-        : [...current, template];
+      const next = exists ? current.map((item) => (item.id === template.id ? template : item)) : [template, ...current];
+      return next.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     });
     setActiveId(template.id);
     toast.success("تم حفظ القالب على هذا الجهاز.");

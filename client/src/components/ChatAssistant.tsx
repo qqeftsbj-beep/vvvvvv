@@ -26,6 +26,15 @@ const INBOX_KEY = "abu-kayan-inbox";
 
 function replyFor(text: string) {
   const normalized = text.toLowerCase();
+  if (/السلام عليكم|سلام عليكم|مرحبا|مرحبًا|اهلا|أهلا|أهلًا/.test(normalized)) {
+    return "وعليكم السلام ورحمة الله وبركاته. أهلًا بك في استوديو أبو كيان الجنيد، كيف يمكننا خدمتك؟";
+  }
+  if (/شكرا|شكرًا|ممتن/.test(normalized)) {
+    return "العفو، يسعدنا خدمتك. اكتب أريد التواصل إذا رغبت بإرسال طلبك.";
+  }
+  if (/سعر|سعار|تكلفة|ميزانية|كم/.test(normalized)) {
+    return "تختلف التكلفة حسب نوع الخدمة والتفاصيل المطلوبة. اكتب أريد التواصل وسأجمع بيانات طلبك للمتابعة.";
+  }
   if (normalized.includes("إعلان") || normalized.includes("اعلان") || normalized.includes("فيس")) {
     return "نصمم الحملات الممولة برسالة واضحة، جمهور أدق، ومحتوى يساعد العميل على اتخاذ الخطوة التالية.";
   }
@@ -69,12 +78,12 @@ export default function ChatAssistant() {
     if (stage === "name") {
       setLead((current) => ({ ...current, name: value }));
       setStage("phone");
-      addAssistant("شكرًا. اكتب رقم الواتساب مع رمز الدولة، مثل: +967775358148.");
+      addAssistant("شكرًا. اكتب رقم الواتساب مع رمز الدولة، مثل: +9677XXXXXXX.");
       return;
     }
     if (stage === "phone") {
       if (!/^\+?[0-9\s-]{8,20}$/.test(value)) {
-        addAssistant("يرجى كتابة رقم صحيح مع رمز الدولة، مثل: +967775358148.");
+        addAssistant("يرجى كتابة رقم صحيح مع رمز الدولة، مثل: +9677XXXXXXX.");
         return;
       }
       setLead((current) => ({ ...current, phone: value }));
