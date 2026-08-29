@@ -32,7 +32,8 @@ type TemplateStudioProps = {
   toolLabel: string;
 };
 
-const MAX_TEXT_LENGTH = 420;
+const MAX_TEXT_LENGTH = 10000;
+const OWNER_PIN = "7705";
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -79,13 +80,23 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const [imageData, setImageData] = useState("");
   const [imageName, setImageName] = useState("");
   const [copied, setCopied] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [pin, setPin] = useState("");
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(storageKey);
       if (!saved) return;
       const parsed = JSON.parse(saved) as Template[];
-      if (Array.isArray(parsed)) setTemplates(parsed);
+      if (Array.isArray(parsed)) {
+        setTemplates(parsed);
+        if (parsed[0]) {
+          setActiveId(parsed[0].id);
+          setText(parsed[0].text);
+          setImageData(parsed[0].imageData);
+          setImageName(parsed[0].imageName);
+        }
+      }
     } catch {
       toast.error("تعذر قراءة القوالب المحفوظة في هذا المتصفح.");
     }
@@ -95,12 +106,37 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     window.localStorage.setItem(storageKey, JSON.stringify(templates));
   }, [storageKey, templates]);
 
+  useEffect(() => {
+    setIsOwner(window.sessionStorage.getItem(`${storageKey}-owner`) === "true");
+  }, [storageKey]);
+
   const activeTemplate = useMemo(
     () => templates.find((template) => template.id === activeId),
     [activeId, templates],
   );
 
+  const unlockOwner = () => {
+    if (pin === OWNER_PIN) {
+      setIsOwner(true);
+      window.sessionStorage.setItem(`${storageKey}-owner`, "true");
+      setPin("");
+      toast.success("تم فتح وضع المالك لهذه الجلسة.");
+      return;
+    }
+    toast.error("رمز المالك غير صحيح.");
+  };
+
+  const lockOwner = () => {
+    setIsOwner(false);
+    window.sessionStorage.removeItem(`${storageKey}-owner`);
+    toast("تم إغلاق وضع المالك.");
+  };
+
   const handleImage = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!isOwner) {
+      toast("الإضافة متاحة في وضع المالك فقط.");
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -116,6 +152,10 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const saveTemplate = () => {
+    if (!isOwner) {
+      toast("افتح وضع المالك لإضافة أو تعديل القوالب.");
+      return;
+    }
     if (!imageData && !text.trim()) {
       toast.error("أضف صورة أو نصًا قبل حفظ القالب.");
       return;
@@ -139,6 +179,10 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const startNewTemplate = () => {
+    if (!isOwner) {
+      toast("إنشاء قالب جديد متاح للمالك فقط.");
+      return;
+    }
     setActiveId("");
     setText("");
     setImageData("");
@@ -155,6 +199,10 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const deleteTemplate = (id: string) => {
+    if (!isOwner) {
+      toast("حذف القوالب متاح للمالك فقط.");
+      return;
+    }
     setTemplates((current) => current.filter((item) => item.id !== id));
     if (id === activeId) startNewTemplate();
     toast("تم حذف القالب من هذه الصفحة.");
@@ -267,21 +315,35 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
             <button type="button" className="studio-ghost-button" onClick={startNewTemplate}><Plus size={16} /> قالب جديد</button>
           </div>
 
-          <label className="upload-zone">
-            <input type="file" accept="image/*" onChange={handleImage} />
+          <div className={`owner-control ${isOwner ? "is-unlocked" : ""}`}>
+            {isOwner ? (
+              <><span><Check size={15} /> وضع المالك مفتوح — يمكنك الإضافة والتعديل</span><button type="button" onClick={lockOwner}>إغلاق</button></>
+            ) : (
+              <><span>الإضافة والتعديل للمالك فقط</span><div><input type="password" inputMode="numeric" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="رمز المالك" aria-label="رمز المالك" /><button type="button" onClick={unlockOwner}>فتح وضع المالك</button></div></>
+            )}
+          </div>
+
+          <label className={`upload-zone ${!isOwner ? "is-locked" : ""}`}>
+            <input type="file" accept="image/*" onChange={handleImage} disabled={!isOwner} />
             {imageData ? (
               <img src={imageData} alt="المعاينة المرفوعة" className="studio-upload-preview" />
             ) : (
-              <span className="upload-empty"><ImagePlus size={28} /><strong>أفلت الصورة هنا</strong><small>أو اضغط لاختيار صورة من جهازك</small><span className="upload-chip"><Upload size={14} /> رفع صورة</span></span>
+              <span className="upload-empty"><ImagePlus size={28} /><strong>{isOwner ? "أفلت الصورة هنا" : "الصورة محفوظة للمالك"}</strong><small>{isOwner ? "أو اضغط لاختيار صورة من جهازك" : "افتح وضع المالك لإضافة صورة"}</small><span className="upload-chip"><Upload size={14} /> {isOwner ? "رفع صورة" : "مقفل"}</span></span>
             )}
           </label>
           {imageName && <div className="file-name">{imageName}</div>}
 
           <label className="studio-field">
             <span>النص أسفل الصورة</span>
-            <textarea value={text} maxLength={MAX_TEXT_LENGTH} onChange={(event) => setText(event.target.value)} placeholder="اكتب التهنئة أو النص الذي تريد الاحتفاظ به..." />
-            <small>{text.length} / {MAX_TEXT_LENGTH}</small>
+            <textarea value={text} maxLength={MAX_TEXT_LENGTH} readOnly={!isOwner} onChange={(event) => setText(event.target.value)} placeholder="اكتب التهنئة أو النص الذي تريد الاحتفاظ به..." />
+            <small>{text.length.toLocaleString("ar-EG")} / 10,000</small>
           </label>
+
+          <div className="template-card-preview">
+            <div className="template-card-image">{imageData ? <img src={imageData} alt="" /> : <ImagePlus size={28} />}</div>
+            <p>{text || "سيظهر النص هنا تحت الصورة"}</p>
+            <span>أبو كيان الجنيد · {toolName}</span>
+          </div>
 
           <div className="studio-action-row">
             <button type="button" className="studio-primary-button" onClick={saveTemplate}><Check size={17} /> حفظ القالب</button>
