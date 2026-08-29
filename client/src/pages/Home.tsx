@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpLeft,
+  ArrowUp,
   Check,
   ChevronDown,
   ExternalLink,
@@ -172,6 +173,7 @@ export default function Home() {
             <span className="brand-mark-wrap">
               <BrandSeal className="brand-mark" />
             </span>
+            <span className="brand-avatar"><img src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" alt="" /></span>
             <span className="brand-copy">
               <strong>أبو كيان الجنيد</strong>
               <span>استوديو إبداعي · اليمن</span>
@@ -471,6 +473,7 @@ export default function Home() {
 
       <div className="side-note" aria-hidden="true">أبو كيان / اليمن</div>
       <button className="scroll-cue" type="button" onClick={() => handleNav("services")} aria-label="انتقل إلى الخدمات"><ChevronDown size={17} /></button>
+      <button className="back-to-top" type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="العودة إلى الأعلى"><ArrowUp size={15} /></button>
       <ChatAssistant />
     </main>
   );
