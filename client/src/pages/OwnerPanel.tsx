@@ -1,150 +1,50 @@
 /*
   Design reminder — Owner control room:
-  A private, quiet editor for the dark luxury brand. Make every control explicit,
-  keep the owner flow calm on mobile, and never imply client-side PIN security is server security.
+  A calm, explicit editor for the full Arabic site system: identity, typography, media, services, products, buttons, and persistence.
 */
 
 import { ChangeEvent, useEffect, useState } from "react";
 import { ArrowRight, Check, ImagePlus, LockKeyhole, LogOut, Plus, Save, Trash2 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { toast } from "sonner";
-import { SiteContent, defaultSiteContent, loadSiteContent, saveSiteContent } from "@/lib/siteContent";
+import { EditableButton, EditableProduct, EditableService, SiteContent, defaultSiteContent, loadSiteContent, saveSiteContent } from "@/lib/siteContent";
 
 const OWNER_PIN = "770562";
+const readImage = (file: File) => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); });
 
-function readImage(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+const actionLabels: Record<EditableButton["action"], string> = { contact: "انتقل إلى التواصل", services: "انتقل إلى الخدمات", work: "انتقل إلى الأعمال", gemini: "افتح Gemini", "chat-gbt": "افتح Chat GBT", external: "رابط خارجي" };
+const placementLabels: Record<EditableButton["placement"], string> = { header: "الهيدر", hero: "واجهة البداية", services: "قسم الخدمات", contact: "قسم التواصل" };
 
 export default function OwnerPanel() {
-  const [, navigate] = useLocation();
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState("");
   const [content, setContent] = useState<SiteContent>(() => loadSiteContent());
+  useEffect(() => setUnlocked(window.sessionStorage.getItem("abu-kayan-owner-panel") === "true"), []);
 
-  useEffect(() => {
-    setUnlocked(window.sessionStorage.getItem("abu-kayan-owner-panel") === "true");
-  }, []);
+  const unlock = () => { if (pin === OWNER_PIN) { window.sessionStorage.setItem("abu-kayan-owner-panel", "true"); setUnlocked(true); setPin(""); toast.success("تم فتح لوحة المالك."); } else toast.error("كلمة السر غير صحيحة."); };
+  const logout = () => { window.sessionStorage.removeItem("abu-kayan-owner-panel"); setUnlocked(false); toast("تم إغلاق لوحة المالك."); };
+  const update = <K extends keyof SiteContent>(key: K, value: SiteContent[K]) => setContent((current) => ({ ...current, [key]: value }));
+  const updateSetting = <K extends keyof SiteContent["settings"]>(key: K, value: SiteContent["settings"][K]) => setContent((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
+  const updateService = (index: number, key: keyof EditableService, value: string) => setContent((current) => ({ ...current, services: current.services.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+  const updateProduct = (index: number, key: keyof EditableProduct, value: string) => setContent((current) => ({ ...current, products: current.products.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+  const updateButton = (index: number, key: keyof EditableButton, value: string) => setContent((current) => ({ ...current, buttons: current.buttons.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+  const addService = () => setContent((current) => ({ ...current, services: [...current.services, { number: String(current.services.length + 1).padStart(2, "0"), title: "خدمة جديدة", description: "اكتب وصف الخدمة هنا.", tag: "وصف مختصر" }] }));
+  const addProduct = () => setContent((current) => ({ ...current, products: [...current.products, { id: crypto.randomUUID(), title: "منتج جديد", description: "اكتب وصف المنتج هنا.", price: "" }] }));
+  const addButton = () => setContent((current) => ({ ...current, buttons: [...current.buttons, { id: crypto.randomUUID(), label: "زر جديد", placement: "hero", action: "contact" }] }));
+  const removeAt = (key: "services" | "products" | "buttons", index: number) => setContent((current) => ({ ...current, [key]: current[key].filter((_, i) => i !== index) } as SiteContent));
+  const handleImage = async (event: ChangeEvent<HTMLInputElement>, key: "heroImage" | "backgroundImage") => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) return toast.error("اختر صورة صالحة."); const image = await readImage(file); if (key === "heroImage") update("heroImage", image); else updateSetting("backgroundImage", image); };
+  const save = () => { saveSiteContent(content); toast.success("تم حفظ تعديلات الموقع على هذا الجهاز."); };
 
-  const unlock = () => {
-    if (pin === OWNER_PIN) {
-      window.sessionStorage.setItem("abu-kayan-owner-panel", "true");
-      setUnlocked(true);
-      setPin("");
-      toast.success("تم فتح لوحة المالك.");
-      return;
-    }
-    toast.error("كلمة السر غير صحيحة.");
-  };
+  if (!unlocked) return <main dir="rtl" className="owner-page owner-lock-page"><div className="owner-lock-card"><div className="owner-lock-icon"><LockKeyhole size={25} /></div><span className="studio-label">منطقة خاصة بالمالك</span><h1>لوحة التحكم</h1><p>أدخل كلمة السر للوصول إلى أدوات تعديل الموقع.</p><input autoFocus type="password" inputMode="numeric" value={pin} maxLength={6} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="كلمة السر" aria-label="كلمة السر" /><button type="button" className="owner-save" onClick={unlock}><LockKeyhole size={16} /> فتح اللوحة</button><Link href="/" className="owner-back"><ArrowRight size={15} /> العودة للموقع</Link></div></main>;
 
-  const logout = () => {
-    window.sessionStorage.removeItem("abu-kayan-owner-panel");
-    setUnlocked(false);
-    toast("تم إغلاق لوحة المالك.");
-  };
-
-  const update = <K extends keyof SiteContent>(key: K, value: SiteContent[K]) => {
-    setContent((current) => ({ ...current, [key]: value }));
-  };
-
-  const updateService = (index: number, key: "title" | "description" | "tag", value: string) => {
-    setContent((current) => ({
-      ...current,
-      services: current.services.map((service, serviceIndex) => serviceIndex === index ? { ...service, [key]: value } : service),
-    }));
-  };
-
-  const addService = () => {
-    setContent((current) => ({
-      ...current,
-      services: [...current.services, { number: String(current.services.length + 1).padStart(2, "0"), title: "خدمة جديدة", description: "اكتب وصف الخدمة هنا.", tag: "وصف مختصر" }],
-    }));
-  };
-
-  const removeService = (index: number) => {
-    setContent((current) => ({
-      ...current,
-      services: current.services.filter((_, serviceIndex) => serviceIndex !== index).map((service, serviceIndex) => ({ ...service, number: String(serviceIndex + 1).padStart(2, "0") })),
-    }));
-  };
-
-  const handleImage = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("اختر صورة صالحة.");
-      return;
-    }
-    update("heroImage", await readImage(file));
-  };
-
-  const save = () => {
-    saveSiteContent(content);
-    toast.success("تم حفظ تعديلات الموقع على هذا الجهاز.");
-  };
-
-  if (!unlocked) {
-    return (
-      <main dir="rtl" className="owner-page owner-lock-page">
-        <div className="owner-lock-card">
-          <div className="owner-lock-icon"><LockKeyhole size={25} /></div>
-          <span className="studio-label">منطقة خاصة بالمالك</span>
-          <h1>لوحة التحكم</h1>
-          <p>أدخل كلمة السر للوصول إلى أدوات تعديل الموقع.</p>
-          <input autoFocus type="password" inputMode="numeric" value={pin} maxLength={6} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="كلمة السر" aria-label="كلمة السر" />
-          <button type="button" className="owner-save" onClick={unlock}><LockKeyhole size={16} /> فتح اللوحة</button>
-          <Link href="/" className="owner-back"><ArrowRight size={15} /> العودة للموقع</Link>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main dir="rtl" className="owner-page">
-      <header className="owner-header">
-        <div><span className="studio-label">أبو كيان الجنيد</span><h1>لوحة التحكم</h1></div>
-        <div className="owner-header-actions"><Link href="/" className="owner-back"><ArrowRight size={15} /> معاينة الموقع</Link><button type="button" className="owner-logout" onClick={logout}><LogOut size={15} /> إغلاق</button></div>
-      </header>
-
-      <section className="owner-grid">
-        <div className="owner-main-card">
-          <div className="owner-card-heading"><div><span className="studio-label">الواجهة الرئيسية</span><h2>المحتوى والصورة</h2></div><button type="button" className="owner-save" onClick={save}><Save size={16} /> حفظ التعديلات</button></div>
-          <div className="owner-fields">
-            <label><span>السطر التعريفي</span><input value={content.heroEyebrow} onChange={(event) => update("heroEyebrow", event.target.value)} /></label>
-            <label><span>عنوان البداية</span><input value={content.heroTitle} onChange={(event) => update("heroTitle", event.target.value)} /></label>
-            <label><span>الكلمة المميزة</span><input value={content.heroAccent} onChange={(event) => update("heroAccent", event.target.value)} /></label>
-            <label><span>تكملة العنوان</span><input value={content.heroEnding} onChange={(event) => update("heroEnding", event.target.value)} /></label>
-            <label className="owner-wide"><span>الوصف</span><textarea value={content.heroLead} onChange={(event) => update("heroLead", event.target.value)} maxLength={10000} /><small>{content.heroLead.length.toLocaleString("ar-EG")} / 10,000</small></label>
-            <label><span>نص الزر الرئيسي</span><input value={content.primaryButton} onChange={(event) => update("primaryButton", event.target.value)} /></label>
-            <label><span>نص زر الأعمال</span><input value={content.secondaryButton} onChange={(event) => update("secondaryButton", event.target.value)} /></label>
-          </div>
-          <label className="owner-image-upload"><input type="file" accept="image/*" onChange={handleImage} /><span><ImagePlus size={19} /> تغيير صورة البداية</span><small>يمكنك اختيار صورة من جهازك وستحفظ محليًا للمعاينة.</small></label>
-          <div className="owner-image-preview"><img src={content.heroImage || defaultSiteContent.heroImage} alt="معاينة صورة البداية" /></div>
-        </div>
-
-        <aside className="owner-side-card"><span className="studio-label">حالة الحماية</span><h2>وضع المالك مفتوح</h2><p>أنت الآن في وضع التحرير. الحفظ محلي في هذا المتصفح، بينما تظل المعاينة العامة متاحة للزوار.</p><div className="owner-status"><Check size={16} /> تحرير مسموح</div><Link href="/owner/inbox" className="owner-inbox-link">فتح صندوق الرسائل</Link></aside>
-      </section>
-
-      <section className="owner-services-card">
-        <div className="owner-card-heading"><div><span className="studio-label">الخدمات</span><h2>أضف أو عدّل خدماتك</h2></div><button type="button" className="owner-add" onClick={addService}><Plus size={16} /> إضافة خدمة</button></div>
-        <div className="owner-service-list">
-          {content.services.map((service, index) => (
-            <div className="owner-service-row" key={`${service.number}-${index}`}>
-              <span className="owner-service-number">{service.number}</span>
-              <label><span>اسم الخدمة</span><input value={service.title} onChange={(event) => updateService(index, "title", event.target.value)} /></label>
-              <label><span>الوصف</span><textarea value={service.description} onChange={(event) => updateService(index, "description", event.target.value)} /></label>
-              <label><span>التصنيف</span><input value={service.tag} onChange={(event) => updateService(index, "tag", event.target.value)} /></label>
-              <button type="button" className="owner-delete" onClick={() => removeService(index)} aria-label="حذف الخدمة"><Trash2 size={16} /></button>
-            </div>
-          ))}
-        </div>
-        <button type="button" className="owner-save owner-save-bottom" onClick={save}><Save size={16} /> حفظ كل التعديلات</button>
-      </section>
-    </main>
-  );
+  return <main dir="rtl" className="owner-page">
+    <header className="owner-header"><div><span className="studio-label">أبو كيان الجنيد · محرر شامل</span><h1>لوحة التحكم</h1></div><div className="owner-header-actions"><Link href="/" className="owner-back"><ArrowRight size={15} /> معاينة الموقع</Link><button type="button" className="owner-logout" onClick={logout}><LogOut size={15} /> إغلاق</button></div></header>
+    <div className="owner-editor-grid">
+      <section className="owner-main-card"><div className="owner-card-heading"><div><span className="studio-label">01 / الهوية</span><h2>المحتوى والصورة</h2></div><button type="button" className="owner-save" onClick={save}><Save size={16} /> حفظ</button></div><div className="owner-fields"><label><span>السطر التعريفي</span><input value={content.heroEyebrow} onChange={(e) => update("heroEyebrow", e.target.value)} /></label><label><span>عنوان البداية</span><input value={content.heroTitle} onChange={(e) => update("heroTitle", e.target.value)} /></label><label><span>الكلمة المميزة</span><input value={content.heroAccent} onChange={(e) => update("heroAccent", e.target.value)} /></label><label><span>تكملة العنوان</span><input value={content.heroEnding} onChange={(e) => update("heroEnding", e.target.value)} /></label><label className="owner-wide"><span>الوصف الرئيسي</span><textarea value={content.heroLead} onChange={(e) => update("heroLead", e.target.value)} maxLength={10000} /><small>{content.heroLead.length.toLocaleString("ar-EG")} / 10,000</small></label><label><span>نص الزر الرئيسي</span><input value={content.primaryButton} onChange={(e) => update("primaryButton", e.target.value)} /></label><label><span>نص زر الأعمال</span><input value={content.secondaryButton} onChange={(e) => update("secondaryButton", e.target.value)} /></label></div><label className="owner-image-upload"><input type="file" accept="image/*" onChange={(e) => handleImage(e, "heroImage")} /><span><ImagePlus size={18} /> تغيير صورة البداية</span><small>تُحفظ محليًا للمعاينة.</small></label><div className="owner-image-preview"><img src={content.heroImage || defaultSiteContent.heroImage} alt="معاينة" /></div></section>
+      <aside className="owner-side-card"><span className="studio-label">حالة التحرير</span><h2>وضع المالك مفتوح</h2><p>كل حقل أدناه ينعكس على المعاينة بعد الحفظ. الحفظ الحالي محلي في هذا المتصفح.</p><div className="owner-status"><Check size={16} /> تحرير شامل مسموح</div><Link href="/owner/inbox" className="owner-inbox-link">فتح صندوق الرسائل</Link></aside>
+    </div>
+    <section className="owner-settings-card"><div className="owner-card-heading"><div><span className="studio-label">02 / الشكل</span><h2>الخطوط والألوان والخلفية</h2></div><button type="button" className="owner-save" onClick={save}><Save size={16} /> حفظ الهوية</button></div><div className="owner-fields settings-fields"><label><span>نوع الخط</span><select value={content.settings.fontFamily} onChange={(e) => updateSetting("fontFamily", e.target.value as SiteContent["settings"]["fontFamily"])}><option value="Cairo">Cairo</option><option value="Tajawal">Tajawal</option><option value="Noto Kufi Arabic">Noto Kufi Arabic</option><option value="system">خط الجهاز</option></select></label><label><span>حجم الخط الأساسي</span><input type="number" min="12" max="24" value={content.settings.baseFontSize} onChange={(e) => updateSetting("baseFontSize", Number(e.target.value))} /></label><label><span>مقياس العناوين</span><input type="number" min=".75" max="1.5" step=".05" value={content.settings.headingScale} onChange={(e) => updateSetting("headingScale", Number(e.target.value))} /></label><label><span>لون الخلفية</span><input type="color" value={content.settings.backgroundColor} onChange={(e) => updateSetting("backgroundColor", e.target.value)} /></label><label><span>لون البطاقات</span><input type="color" value={content.settings.panelColor} onChange={(e) => updateSetting("panelColor", e.target.value)} /></label><label><span>لون الإبراز</span><input type="color" value={content.settings.accentColor} onChange={(e) => updateSetting("accentColor", e.target.value)} /></label><label><span>الذهبي</span><input type="color" value={content.settings.goldColor} onChange={(e) => updateSetting("goldColor", e.target.value)} /></label></div><label className="owner-image-upload"><input type="file" accept="image/*" onChange={(e) => handleImage(e, "backgroundImage")} /><span><ImagePlus size={18} /> إضافة أو تغيير خلفية</span><small>الصورة تُستخدم كخلفية زخرفية للمعاينة.</small></label></section>
+    <section className="owner-services-card"><div className="owner-card-heading"><div><span className="studio-label">03 / المحتوى</span><h2>الخدمات والمنتجات</h2></div><div className="owner-header-actions"><button type="button" className="owner-add" onClick={addService}><Plus size={16} /> خدمة</button><button type="button" className="owner-add" onClick={addProduct}><Plus size={16} /> منتج</button></div></div><div className="owner-service-list">{content.services.map((service, index) => <div className="owner-service-row" key={`service-${index}`}><span className="owner-service-number">{service.number}</span><label><span>اسم الخدمة</span><input value={service.title} onChange={(e) => updateService(index, "title", e.target.value)} /></label><label><span>الوصف</span><textarea value={service.description} onChange={(e) => updateService(index, "description", e.target.value)} /></label><label><span>التصنيف</span><input value={service.tag} onChange={(e) => updateService(index, "tag", e.target.value)} /></label><button type="button" className="owner-delete" onClick={() => removeAt("services", index)} aria-label="حذف الخدمة"><Trash2 size={16} /></button></div>)}{content.products.map((product, index) => <div className="owner-service-row product-row" key={product.id}><span className="owner-service-number">منتج</span><label><span>اسم المنتج</span><input value={product.title} onChange={(e) => updateProduct(index, "title", e.target.value)} /></label><label><span>الوصف</span><textarea value={product.description} onChange={(e) => updateProduct(index, "description", e.target.value)} /></label><label><span>السعر أو العبارة</span><input value={product.price} onChange={(e) => updateProduct(index, "price", e.target.value)} /></label><button type="button" className="owner-delete" onClick={() => removeAt("products", index)} aria-label="حذف المنتج"><Trash2 size={16} /></button></div>)}</div></section>
+    <section className="owner-services-card"><div className="owner-card-heading"><div><span className="studio-label">04 / التفاعل</span><h2>الأزرار ومواقعها وإجراءاتها</h2></div><button type="button" className="owner-add" onClick={addButton}><Plus size={16} /> إضافة زر</button></div><div className="owner-button-list">{content.buttons.length === 0 && <p className="owner-empty">لا توجد أزرار مخصصة بعد. أضف زرًا واختر موضعه وإجراءه.</p>}{content.buttons.map((button, index) => <div className="owner-button-row" key={button.id}><label><span>اسم الزر</span><input value={button.label} onChange={(e) => updateButton(index, "label", e.target.value)} /></label><label><span>الموضع</span><select value={button.placement} onChange={(e) => updateButton(index, "placement", e.target.value)}>{Object.entries(placementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>ماذا يفعل؟</span><select value={button.action} onChange={(e) => updateButton(index, "action", e.target.value)}>{Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{button.action === "external" && <label><span>الرابط</span><input value={button.url || ""} onChange={(e) => updateButton(index, "url", e.target.value)} placeholder="https://" /></label>}<button type="button" className="owner-delete" onClick={() => removeAt("buttons", index)} aria-label="حذف الزر"><Trash2 size={16} /></button></div>)}</div><button type="button" className="owner-save owner-save-bottom" onClick={save}><Save size={16} /> حفظ كل التعديلات</button></section>
+  </main>;
 }

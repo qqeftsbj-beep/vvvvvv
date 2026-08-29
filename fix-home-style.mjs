@@ -1,0 +1,11 @@
+import fs from "node:fs";
+const file = "/home/ubuntu/abu-kayan-store/client/src/pages/Home.tsx";
+let lines = fs.readFileSync(file, "utf8").split("\n");
+lines = lines.filter((line) => !line.includes("const dynamicStyle ="));
+const mainIndex = lines.findIndex((line) => line.includes('<main dir="rtl" className={`site-shell'));
+if (mainIndex < 1) throw new Error("main element not found");
+const dynamicStyle = '  const dynamicStyle = { "--dynamic-font": content.settings.fontFamily === "system" ? "system-ui, sans-serif" : `"${content.settings.fontFamily}", Tahoma, sans-serif`, "--dynamic-base": `${content.settings.baseFontSize}px`, "--dynamic-heading": content.settings.headingScale, "--dynamic-bg": content.settings.backgroundColor, "--dynamic-panel": content.settings.panelColor, "--dynamic-accent": content.settings.accentColor, "--dynamic-gold": content.settings.goldColor, ...(content.settings.backgroundImage ? { backgroundImage: `linear-gradient(rgba(8,11,17,.84), rgba(8,11,17,.92)), url(${content.settings.backgroundImage})` } : {}) } as CSSProperties;';
+lines.splice(mainIndex - 1, 0, dynamicStyle);
+const updatedMainIndex = mainIndex + 1;
+lines[updatedMainIndex] = lines[updatedMainIndex].replace(/style=\{[^}]*\}>$/, "style={dynamicStyle}>");
+fs.writeFileSync(file, lines.join("\n"));

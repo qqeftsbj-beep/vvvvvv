@@ -1,6 +1,6 @@
 /*
   Design reminder — Shared content model:
-  Keep editable content small, explicit, and Arabic-first so the owner panel remains calm and usable.
+  Arabic-first editable content with explicit controls for identity, typography, sections, products, and buttons.
 */
 
 export type EditableService = {
@@ -8,6 +8,34 @@ export type EditableService = {
   title: string;
   description: string;
   tag: string;
+  image?: string;
+};
+
+export type EditableProduct = {
+  id: string;
+  title: string;
+  description: string;
+  price: string;
+  image?: string;
+};
+
+export type EditableButton = {
+  id: string;
+  label: string;
+  placement: "hero" | "services" | "contact" | "header";
+  action: "contact" | "services" | "work" | "gemini" | "chat-gbt" | "external";
+  url?: string;
+};
+
+export type SiteSettings = {
+  fontFamily: "Cairo" | "Tajawal" | "Noto Kufi Arabic" | "system";
+  baseFontSize: number;
+  headingScale: number;
+  backgroundColor: string;
+  panelColor: string;
+  accentColor: string;
+  goldColor: string;
+  backgroundImage: string;
 };
 
 export type SiteContent = {
@@ -20,6 +48,9 @@ export type SiteContent = {
   primaryButton: string;
   secondaryButton: string;
   services: EditableService[];
+  products: EditableProduct[];
+  buttons: EditableButton[];
+  settings: SiteSettings;
 };
 
 export const SITE_CONTENT_KEY = "abu-kayan-site-content";
@@ -38,6 +69,18 @@ export const defaultSiteContent: SiteContent = {
     { number: "02", title: "الإعلانات الممولة", description: "حملة فيسبوك أوضح: رسالة مفهومة، جمهور أدق، ومحتوى يفتح باب التواصل بدل أن يمر مرورًا عابرًا.", tag: "استراتيجية + إدارة" },
     { number: "03", title: "المواقع وصفحات الهبوط", description: "نحوّل فكرتك إلى واجهة مرتبة، سريعة، ومتجاوبة تساعد العميل على فهمك واتخاذ الخطوة التالية.", tag: "ويب + تجربة مستخدم" },
   ],
+  products: [],
+  buttons: [],
+  settings: {
+    fontFamily: "Cairo",
+    baseFontSize: 16,
+    headingScale: 1,
+    backgroundColor: "#080b11",
+    panelColor: "#111722",
+    accentColor: "#ca8467",
+    goldColor: "#d5b36a",
+    backgroundImage: "",
+  },
 };
 
 export function loadSiteContent(): SiteContent {
@@ -50,6 +93,9 @@ export function loadSiteContent(): SiteContent {
       ...defaultSiteContent,
       ...saved,
       services: Array.isArray(saved.services) && saved.services.length ? saved.services : defaultSiteContent.services,
+      products: Array.isArray(saved.products) ? saved.products : defaultSiteContent.products,
+      buttons: Array.isArray(saved.buttons) ? saved.buttons : defaultSiteContent.buttons,
+      settings: { ...defaultSiteContent.settings, ...(saved.settings || {}) },
     };
   } catch {
     return defaultSiteContent;

@@ -4,7 +4,7 @@
   asymmetric editorial composition, tactile portfolio cards, direct and warm copy.
 */
 
-import { useEffect, useState } from "react";
+import { CSSProperties, useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpLeft,
@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
-import { SiteContent, loadSiteContent } from "@/lib/siteContent";
+import { EditableButton, SiteContent, loadSiteContent } from "@/lib/siteContent";
 import ChatAssistant from "@/components/ChatAssistant";
 
 const whatsappChannel =
@@ -148,6 +148,18 @@ export default function Home() {
     return () => observer.disconnect();
   }, []);
 
+  const handleCustomButton = (button: EditableButton) => {
+    if (button.action === "external" && button.url) {
+      window.open(button.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (button.action === "gemini") return navigate("/templates/gemini");
+    if (button.action === "chat-gbt") return navigate("/templates/chat-gbt");
+    if (button.action === "services") return handleNav("services");
+    if (button.action === "work") return handleNav("work");
+    handleNav("contact");
+  };
+
   const handlePlaceholder = (label: string) => {
     toast(`${label} متاح ضمن المعاينة، وسيُربط بعد اعتماد النسخة النهائية.`);
   };
@@ -168,8 +180,9 @@ export default function Home() {
     });
   };
 
+  const dynamicStyle = { "--dynamic-font": content.settings.fontFamily === "system" ? "system-ui, sans-serif" : `"${content.settings.fontFamily}", Tahoma, sans-serif`, "--dynamic-base": `${content.settings.baseFontSize}px`, "--dynamic-heading": content.settings.headingScale, "--dynamic-bg": content.settings.backgroundColor, "--dynamic-panel": content.settings.panelColor, "--dynamic-accent": content.settings.accentColor, "--dynamic-gold": content.settings.goldColor, ...(content.settings.backgroundImage ? { backgroundImage: `linear-gradient(rgba(8,11,17,.84), rgba(8,11,17,.92)), url(${content.settings.backgroundImage})` } : {}) } as CSSProperties;
   return (
-    <main dir="rtl" className={`site-shell ${lightMode ? "site-light" : ""}`}>
+    <main dir="rtl" className={`site-shell ${lightMode ? "site-light" : ""}`} style={dynamicStyle}>
       <div className="paper-grain" aria-hidden="true" />
       <header className="site-header">
         <div className="header-inner">
@@ -261,6 +274,7 @@ export default function Home() {
             <Link href="/templates/gemini" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Gemini <ArrowLeft size={15} /></Link>
             <Link href="/templates/chat-gbt" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Chat GBT <ArrowLeft size={15} /></Link>
           </div>
+          {content.buttons.filter((button) => button.placement === "hero").length > 0 && <div className="custom-hero-actions">{content.buttons.filter((button) => button.placement === "hero").map((button) => <button key={button.id} type="button" className="custom-site-button" onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
           <div className="hero-proof">
             <div className="proof-avatars" aria-hidden="true">
               <span>أ</span>
@@ -353,6 +367,8 @@ export default function Home() {
           })}
         </div>
       </section>
+
+      {content.products.length > 0 && <section id="products" className="section products-section" data-reveal><span className="section-ghost" aria-hidden="true">04</span><div className="section-intro"><span className="section-index">/ 04</span><div><div className="eyebrow">منتجات وخدمات جاهزة</div><h2>أشياء صُممت<br /><em>لتُطلب الآن.</em></h2></div><p>أضف منتجاتك أو باقاتك من لوحة التحكم، واجعلها ظاهرة في واجهة الموقع بشكل واضح.</p></div><div className="product-grid">{content.products.map((product) => <article className="product-card" key={product.id}>{product.image && <img src={product.image} alt="" loading="lazy" />}<div><h3>{product.title}</h3><p>{product.description}</p><strong>{product.price}</strong></div></article>)}</div></section>}
 
       <section id="work" className="section work-section" data-reveal>
         <span className="section-ghost" aria-hidden="true">03</span>

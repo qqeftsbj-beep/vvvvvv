@@ -2294,3 +2294,30 @@
   .hero-section { padding-top: 30px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *:before, *:after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/*
+  Design reminder — Full owner editor surface:
+  Every editable control must translate into a visible, calm, premium result in the public preview.
+*/
+.site-shell { --site-dynamic-bg: var(--dynamic-bg, #080b11); --site-dynamic-panel: var(--dynamic-panel, #111722); --site-dynamic-accent: var(--dynamic-accent, #ca8467); --site-dynamic-gold: var(--dynamic-gold, #d5b36a); background-color: var(--site-dynamic-bg); font-family: var(--dynamic-font, "Cairo", Tahoma, sans-serif); font-size: var(--dynamic-base, 16px); }
+.site-shell .service-row, .site-shell .work-card, .site-shell .process-card { background-color: var(--site-dynamic-panel); }
+.site-shell .eyebrow, .site-shell em { color: var(--site-dynamic-accent); }
+.site-shell .button-primary, .site-shell .ai-tool-button, .site-shell .contact-button { background-color: var(--site-dynamic-gold); border-color: var(--site-dynamic-gold); }
+.site-shell .hero-art-frame { background-image: linear-gradient(145deg, color-mix(in srgb, var(--site-dynamic-panel) 80%, #244e82), var(--site-dynamic-bg)); }
+.custom-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.custom-site-button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--site-dynamic-gold); background: transparent; color: var(--text-primary, #f6f1e8); padding: 9px 12px; font-size: 10px; transition: .18s transform, .18s background, .18s color; }
+.custom-site-button:hover { transform: translateY(-2px); background: var(--site-dynamic-gold); color: #0b0e14; }
+.product-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.product-card { border: 1px solid rgba(213,179,106,.24); background: var(--site-dynamic-panel); padding: 14px; }
+.product-card img { width: 100%; aspect-ratio: 1.4; object-fit: cover; margin-bottom: 10px; }
+.product-card h3 { margin: 0 0 5px; font-size: 15px; }
+.product-card p { color: var(--text-muted, #9aa5b5); font-size: 10px; line-height: 1.9; margin: 0 0 8px; }
+.product-card strong { color: var(--site-dynamic-gold); font-size: 11px; }
+.owner-editor-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, .7fr); gap: 14px; }
+.owner-settings-card { margin-top: 14px; border: 1px solid var(--line-soft); background: var(--panel-deep); padding: 18px; }
+.settings-fields { grid-template-columns: repeat(4, minmax(0,1fr)); }
+.owner-button-list { display: grid; gap: 11px; }
+.owner-button-row { display: grid; grid-template-columns: 1.2fr .8fr 1fr 1.2fr auto; gap: 9px; align-items: end; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.owner-empty { color: var(--text-muted); font-size: 11px; }
+@media (max-width: 780px) { .owner-editor-grid, .settings-fields { grid-template-columns: 1fr; } .product-grid { grid-template-columns: 1fr; } .owner-button-row { grid-template-columns: 1fr 1fr; } .owner-button-row .owner-delete { align-self: end; } .custom-hero-actions { display: grid; grid-template-columns: 1fr; } .custom-site-button { justify-content: center; width: 100%; } }
+@media (max-width: 430px) { .owner-button-row { grid-template-columns: 1fr; } }
