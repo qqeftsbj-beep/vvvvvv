@@ -2222,3 +2222,75 @@
   .brand-avatar { display: none; }
   .back-to-top { right: 12px; bottom: 70px; width: 32px; height: 32px; }
 }
+
+/*
+  Design reminder — Theme toggle:
+  Dark luxury remains the signature; the light mode is a warm paper alternative with restrained indigo and gold.
+*/
+.theme-toggle { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #667085; background: transparent; color: #c6a45d; transition: color 160ms ease-out, background 160ms ease-out, border-color 160ms ease-out; }
+.theme-toggle:hover { border-color: #c6a45d; background: rgba(198,164,93,.12); }
+.site-light { background: #f4efe6; color: #17243a; }
+.site-light .paper-grain { opacity: .12; }
+.site-light .site-header { border-color: #d9cebe; background: rgba(244,239,230,.9); }
+.site-light .brand-copy strong, .site-light .desktop-nav button, .site-light .hero-content h1, .site-light .section-intro h2, .site-light .work-heading h2, .site-light .process-head h2, .site-light .about-copy h2, .site-light .contact-panel h2 { color: #17243a; }
+.site-light .brand-copy span, .site-light .location-note, .site-light .hero-lead, .site-light .section-intro p, .site-light .work-heading p, .site-light .about-copy p, .site-light .contact-panel p { color: #596476; }
+.site-light .desktop-nav button:hover { color: #a87535; }
+.site-light .theme-toggle { border-color: #b8a98f; color: #17243a; }
+.site-light .hero-section, .site-light .services-section, .site-light .work-section, .site-light .process-section, .site-light .about-section, .site-light .contact-section { border-color: #d9cebe; }
+.site-light .hero-art-frame, .site-light .service-row, .site-light .work-card, .site-light .process-card, .site-light .contact-panel { border-color: #c8bba8; background: #fbf8f2; }
+.site-light .hero-art-frame { box-shadow: 9px 9px 0 rgba(23,36,58,.1); }
+.site-light .service-main strong, .site-light .process-card strong, .site-light .work-card h3 { color: #17243a; }
+.site-light .service-main span, .site-light .process-card p, .site-light .work-card p { color: #596476; }
+.site-light .service-row:hover, .site-light .work-card:hover, .site-light .process-card:hover { border-color: #a87535; background: #fffdf8; }
+.site-light .section-number, .site-light .work-index, .site-light .process-card small { color: #a87535; }
+.site-light .site-footer, .site-light .side-note { color: #596476; }
+.site-light .contact-panel { box-shadow: 8px 8px 0 rgba(168,117,53,.16); }
+.site-light .chat-panel { border-color: #a87535; background: #fffdf8; }
+.site-light .chat-head { background: #f4efe6; border-color: #d9cebe; }
+.site-light .chat-bubble { color: #17243a; border-color: #d9cebe; }
+.site-light .chat-bubble.assistant { background: #eef1f4; }
+.site-light .chat-bubble.user { background: #f7ecd2; border-color: #c6a45d; }
+.site-light .chat-form, .site-light .chat-form input { border-color: #d9cebe; background: #fbf8f2; color: #17243a; }
+.site-light .back-to-top { background: #fbf8f2; color: #a87535; border-color: #a87535; }
+.site-light .back-to-top:hover { background: #a87535; color: #fffdf8; }
+@media screen and (max-width: 700px) { .theme-toggle { width: 30px; height: 30px; } .site-light .desktop-nav { background: #fbf8f2; border-color: #c8bba8; } }
+
+/*
+  Design reminder — Luxury editorial v2:
+  A deliberate two-tone canvas, tighter mobile rhythm, visible owner access, and restrained depth.
+*/
+:root { --luxury-black: #080b11; --luxury-blue: #101a2b; --luxury-gold: #d5b36a; --luxury-coral: #ca8467; }
+.site-shell { background: radial-gradient(circle at 86% 8%, rgba(213,179,106,.08), transparent 24rem), radial-gradient(circle at 8% 54%, rgba(36,73,128,.14), transparent 28rem), var(--luxury-black); }
+.site-shell:before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1; background: linear-gradient(115deg, transparent 0 48%, rgba(213,179,106,.035) 48.2%, transparent 48.5%); }
+.site-header { background: rgba(8,11,17,.86); border-bottom-color: rgba(213,179,106,.24); }
+.header-inner { width: min(1240px, calc(100% - 48px)); }
+.header-admin { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 9px; border: 1px solid rgba(213,179,106,.62); color: #d5b36a; font-size: 9px; text-decoration: none; transition: background .18s ease-out, color .18s ease-out, transform .18s ease-out; }
+.header-admin:hover { background: #d5b36a; color: #080b11; transform: translateY(-1px); }
+.hero-section { width: min(1240px, calc(100% - 48px)); position: relative; }
+.hero-section:after { content: ""; position: absolute; top: 8%; right: 47%; width: 1px; height: 72%; background: linear-gradient(transparent, rgba(213,179,106,.28), transparent); pointer-events: none; }
+.hero-art-frame { background: linear-gradient(150deg, #142b4e 0%, #0b111c 70%); box-shadow: 14px 14px 0 rgba(213,179,106,.12), inset 0 0 80px rgba(255,255,255,.025); }
+.service-row { background: linear-gradient(135deg, rgba(24,34,51,.92), rgba(14,19,29,.92)); border-color: rgba(213,179,106,.18); }
+.service-row:hover { border-color: rgba(213,179,106,.78); box-shadow: 8px 8px 0 rgba(201,133,103,.18); }
+.work-card, .process-card { box-shadow: 7px 7px 0 rgba(213,179,106,.07); }
+.section-intro h2, .work-heading h2, .process-head h2, .about-copy h2, .contact-panel h2 { text-wrap: balance; }
+.services-section, .work-section, .process-section, .about-section, .contact-section { content-visibility: auto; contain-intrinsic-size: 600px; }
+@media (max-width: 700px) {
+  .header-inner, .hero-section { width: calc(100% - 24px); }
+  .header-admin { min-height: 29px; padding: 0 7px; font-size: 8px; }
+  .site-header .header-actions { gap: 6px; }
+  .hero-section:after { display: none; }
+  .hero-section { padding-top: 36px; }
+  .hero-content h1 { font-size: clamp(31px, 9.3vw, 42px); line-height: 1.48; }
+  .hero-lead { font-size: 11px; line-height: 2.05; }
+  .section-intro h2, .work-heading h2, .process-head h2, .about-copy h2, .contact-panel h2 { font-size: clamp(25px, 7.4vw, 35px); line-height: 1.52; }
+  .service-row { padding: 14px; }
+  .service-main strong { font-size: 14px; }
+  .service-main span { font-size: 10px; line-height: 1.9; }
+}
+@media (max-width: 430px) {
+  .header-admin { width: 31px; padding: 0; font-size: 0; }
+  .header-admin svg { width: 14px; }
+  .brand-copy strong { font-size: 10px; }
+  .hero-section { padding-top: 30px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *:before, *:after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }

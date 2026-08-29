@@ -10,11 +10,14 @@ import {
   ArrowUpLeft,
   ArrowUp,
   Check,
+  Moon,
+  Sun,
   ChevronDown,
   ExternalLink,
   Facebook,
   Instagram,
   LayoutTemplate,
+  LockKeyhole,
   Menu,
   Megaphone,
   MessageCircle,
@@ -104,9 +107,15 @@ function scrollToId(id: string) {
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lightMode, setLightMode] = useState(() => window.localStorage.getItem("abu-kayan-theme") === "light");
   const [brandClicks, setBrandClicks] = useState(0);
   const [content, setContent] = useState<SiteContent>(() => loadSiteContent());
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    document.documentElement.dataset.siteTheme = lightMode ? "light" : "dark";
+    window.localStorage.setItem("abu-kayan-theme", lightMode ? "light" : "dark");
+  }, [lightMode]);
 
   useEffect(() => {
     const syncContent = () => setContent(loadSiteContent());
@@ -160,7 +169,7 @@ export default function Home() {
   };
 
   return (
-    <main dir="rtl" className="site-shell">
+    <main dir="rtl" className={`site-shell ${lightMode ? "site-light" : ""}`}>
       <div className="paper-grain" aria-hidden="true" />
       <header className="site-header">
         <div className="header-inner">
@@ -197,6 +206,8 @@ export default function Home() {
 
           <div className="header-actions">
             <span className="location-note">صنعاء · عدن · أونلاين</span>
+            <button type="button" className="theme-toggle" onClick={() => setLightMode((current) => !current)} aria-label={lightMode ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"} title={lightMode ? "الوضع الداكن" : "الوضع الفاتح"}>{lightMode ? <Moon size={15} /> : <Sun size={15} />}</button>
+            <Link href="/owner" className="header-admin"><LockKeyhole size={13} /> لوحة التحكم</Link>
             <button
               type="button"
               className="header-cta"
