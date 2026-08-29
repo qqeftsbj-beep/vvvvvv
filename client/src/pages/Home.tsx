@@ -65,24 +65,24 @@ const services = [
 
 const portfolio = [
   {
-    image: "/manus-storage/abu-kayan-wedding-source_0c3ed86e.jpg",
-    eyebrow: "تصميم مناسبة",
-    title: "دعوة تبدأ من التفاصيل",
-    text: "هوية مرئية لفرحة تستحق أن تُحفظ.",
+    image: "/manus-storage/abu-kayan-ai-1_8c6ac08d.jpg",
+    eyebrow: "تصميم AI",
+    title: "فكرة تُخرج من الشاشة",
+    text: "تصميم بصري يشرح التقنية بلغة يمكن تذكّرها.",
     tone: "sand-card",
   },
   {
-    image: "/manus-storage/abu-kayan-graduation-source_ef109ad4.jpg",
-    eyebrow: "تهنئة تخرج",
-    title: "إنجاز له غلافه الخاص",
-    text: "رسالة فخر بتكوين هادئ وواضح.",
+    image: "/manus-storage/abu-kayan-ads-1_49b30575.jpg",
+    eyebrow: "إعلان ممول",
+    title: "الوصول ليس صدفة",
+    text: "فكرة إعلانية تُبنى حول الجمهور والهدف.",
     tone: "indigo-card",
   },
   {
-    image: "/manus-storage/abu-kayan-ads-source_4956ddd4.jpg",
-    eyebrow: "حملة إعلانية",
-    title: "الوصول ليس صدفة",
-    text: "نرتب الفكرة قبل أن نرفع الميزانية.",
+    image: "/manus-storage/abu-kayan-dev-1_f63ffd4f.jpg",
+    eyebrow: "تصميم تجاري",
+    title: "تفاصيل تعطي الثقة",
+    text: "هوية مرئية تُجهز للنشر وتبقى في الذاكرة.",
     tone: "terracotta-card",
   },
 ];
@@ -357,6 +357,23 @@ export default function Home() {
             </div>
             <Check size={18} />
           </div>
+        </div>
+      </section>
+
+      <section className="about-strip" aria-label="عن الاستوديو">
+        <div className="about-image-wrap">
+          <img src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" alt="هوية أبو كيان الجنيد البصرية" className="about-image" />
+          <span>رائد الجنيد / 2026</span>
+        </div>
+        <div className="about-copy">
+          <div className="eyebrow"><span className="eyebrow-dot" /> خلف كل تفصيل، عين تعرف ما تريد</div>
+          <h2>نصمم للناس<br /><em>وليس للخوارزمية فقط.</em></h2>
+          <p>أبو كيان الجنيد مساحة إبداعية تجمع بين الحس البصري، أدوات الذكاء الاصطناعي، وفهم الإعلان حتى يصبح حضورك أوضح.</p>
+        </div>
+        <div className="about-note">
+          <span>من اليمن</span>
+          <strong>إلى كل شاشة</strong>
+          <small>تصميم · فكرة · تنفيذ</small>
         </div>
       </section>
 
