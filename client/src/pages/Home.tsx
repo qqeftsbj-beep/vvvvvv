@@ -29,7 +29,14 @@ const whatsappChannel =
 
 function BrandSeal({ className = "" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 48 48" aria-hidden="true">
+    <svg
+      className={className}
+      viewBox="0 0 48 48"
+      width={className === "contact-seal-mark" ? 28 : className === "signature-mark" ? 25 : 33}
+      height={className === "contact-seal-mark" ? 28 : className === "signature-mark" ? 25 : 33}
+      style={{ display: "block", width: className === "contact-seal-mark" ? 28 : className === "signature-mark" ? 25 : 33, height: className === "contact-seal-mark" ? 28 : className === "signature-mark" ? 25 : 33 }}
+      aria-hidden="true"
+    >
       <path d="M8 35V20.5C8 14.7 12.7 10 18.5 10c3.1 0 5.9 1.4 7.7 3.7C28 11.4 30.8 10 34 10c5.8 0 10 4.7 10 10.5V35h-7V21.3c0-2.1-1.4-3.7-3.2-3.7s-3.6 1.6-3.6 3.7V35h-7V21.3c0-2.1-1.4-3.7-3.2-3.7s-3.6 1.6-3.6 3.7V35H8Z" fill="currentColor" />
       <circle cx="27" cy="8" r="2.5" fill="#c6a45d" />
     </svg>

@@ -42,30 +42,30 @@
 
 :root {
   --radius: 0.35rem;
-  --background: #f5efe5;
-  --foreground: #162b4d;
-  --card: #fffaf1;
-  --card-foreground: #162b4d;
-  --popover: #fffaf1;
-  --popover-foreground: #162b4d;
-  --primary: #162b4d;
-  --primary-foreground: #fffaf1;
-  --secondary: #e7dac8;
-  --secondary-foreground: #162b4d;
-  --muted: #eae0d2;
-  --muted-foreground: #647084;
-  --accent: #b96f52;
-  --accent-foreground: #fffaf1;
+  --background: #0b0e14;
+  --foreground: #f7f3ea;
+  --card: #141a24;
+  --card-foreground: #f7f3ea;
+  --popover: #141a24;
+  --popover-foreground: #f7f3ea;
+  --primary: #c6a45d;
+  --primary-foreground: #0b0e14;
+  --secondary: #1a2331;
+  --secondary-foreground: #f7f3ea;
+  --muted: #1a2331;
+  --muted-foreground: #9fa9b8;
+  --accent: #c98567;
+  --accent-foreground: #0b0e14;
   --destructive: #b64c43;
-  --destructive-foreground: #fffaf1;
-  --border: #d9ccba;
-  --input: #d9ccba;
+  --destructive-foreground: #f7f3ea;
+  --border: #343b48;
+  --input: #343b48;
   --ring: #c6a45d;
   --chart-1: #162b4d;
   --chart-2: #b96f52;
   --chart-3: #c6a45d;
-  --chart-4: #e7dac8;
-  --chart-5: #647084;
+  --chart-4: #1a2331;
+  --chart-5: #9fa9b8;
 }
 
 @layer base {
@@ -75,7 +75,7 @@
 
   html {
     scroll-behavior: smooth;
-    background: #f5efe5;
+    background: #0b0e14;
   }
 
   body {
@@ -110,8 +110,11 @@
   .site-shell {
     position: relative;
     overflow: hidden;
-    background: #f5efe5;
-    color: #162b4d;
+    background:
+      radial-gradient(circle at 16% 0%, rgba(198, 164, 93, 0.1), transparent 27rem),
+      radial-gradient(circle at 90% 24%, rgba(201, 133, 103, 0.08), transparent 24rem),
+      #0b0e14;
+    color: #f7f3ea;
   }
 
   .paper-grain {
@@ -147,7 +150,7 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: #162b4d;
+    color: #f7f3ea;
     text-align: right;
   }
 
@@ -158,12 +161,20 @@
     place-items: center;
     border: 1px solid #c6a45d;
     border-radius: 50%;
-    background: #fffaf1;
+    background: #f7f3ea;
+  }
+
+  svg.brand-mark,
+  svg.signature-mark,
+  svg.contact-seal-mark {
+    display: block;
+    max-width: 100%;
+    flex: 0 0 auto;
   }
 
   .brand-mark {
-    width: 33px;
-    height: 33px;
+    width: 33px !important;
+    height: 33px !important;
     object-fit: contain;
   }
 
@@ -193,7 +204,7 @@
 
   .brand-copy span {
     margin-top: 4px;
-    color: #647084;
+    color: #9fa9b8;
     font-size: 10px;
     font-weight: 500;
     letter-spacing: 0.03em;
@@ -210,7 +221,7 @@
   .work-heading-side button {
     border: 0;
     background: transparent;
-    color: #647084;
+    color: #9fa9b8;
     font-size: 13px;
     font-weight: 500;
     transition: color 180ms ease-out;
@@ -218,7 +229,7 @@
 
   .desktop-nav button:hover,
   .work-heading-side button:hover {
-    color: #162b4d;
+    color: #f7f3ea;
   }
 
   .header-actions {
@@ -228,7 +239,7 @@
   }
 
   .location-note {
-    color: #647084;
+    color: #9fa9b8;
     font-size: 11px;
     white-space: nowrap;
   }
@@ -239,10 +250,10 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    border: 1px solid #162b4d;
-    background: #162b4d;
-    color: #fffaf1;
-    box-shadow: 5px 5px 0 #c6a45d;
+    border: 1px solid #c6a45d;
+    background: #c6a45d;
+    color: #0b0e14;
+    box-shadow: 5px 5px 0 #c98567;
     font-weight: 600;
     transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms ease-out, background 160ms ease-out;
   }
@@ -255,8 +266,8 @@
 
   .header-cta:hover,
   .button-primary:hover {
-    background: #24456f;
-    box-shadow: 2px 2px 0 #c6a45d;
+    background: #e2bf72;
+    box-shadow: 2px 2px 0 #c98567;
     transform: translate(3px, 3px);
   }
 
@@ -269,9 +280,9 @@
 
   .menu-toggle {
     display: none;
-    border: 1px solid #d9ccba;
-    background: #fffaf1;
-    color: #162b4d;
+    border: 1px solid #343b48;
+    background: #f7f3ea;
+    color: #f7f3ea;
     width: 42px;
     height: 42px;
   }
@@ -373,7 +384,7 @@
     padding-inline: 0;
     border-bottom: 1px solid rgba(22, 43, 77, 0.35);
     background: transparent;
-    color: #162b4d;
+    color: #f7f3ea;
     font-weight: 600;
   }
 
@@ -387,7 +398,7 @@
     align-items: center;
     gap: 13px;
     margin-top: 52px;
-    color: #647084;
+    color: #9fa9b8;
     animation: reveal-in 600ms 280ms both;
   }
 
@@ -397,7 +408,7 @@
   }
 
   .hero-proof strong {
-    color: #162b4d;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 11px;
     font-weight: 700;
@@ -419,9 +430,9 @@
     height: 30px;
     place-items: center;
     margin-left: -7px;
-    border: 2px solid #f5efe5;
+    border: 2px solid #0b0e14;
     border-radius: 50%;
-    color: #fffaf1;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 10px;
     background: #162b4d;
@@ -472,7 +483,7 @@
   .hero-art-label {
     position: absolute;
     z-index: 3;
-    color: #647084;
+    color: #9fa9b8;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 10px;
     letter-spacing: 0.05em;
@@ -497,7 +508,7 @@
     bottom: 19px;
     display: grid;
     gap: 3px;
-    color: #fffaf1;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 9px;
     letter-spacing: 0.08em;
@@ -540,7 +551,7 @@
     place-content: center;
     border: 1px dashed rgba(255, 250, 241, 0.72);
     border-radius: 50%;
-    color: #fffaf1;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 10px;
     line-height: 1.45;
@@ -549,10 +560,10 @@
   }
 
   .signature-mark {
-    width: 25px;
-    height: 25px;
+    width: 25px !important;
+    height: 25px !important;
     margin-inline: auto;
-    color: #fffaf1;
+    color: #f7f3ea;
   }
 
   .hero-signature small {
@@ -570,8 +581,8 @@
     padding: 10px 24px;
     border-top: 1px solid rgba(22, 43, 77, 0.18);
     border-bottom: 1px solid rgba(22, 43, 77, 0.18);
-    background: #e7dac8;
-    color: #162b4d;
+    background: #1a2331;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 11px;
     font-weight: 600;
@@ -637,14 +648,14 @@
   .process-head > p {
     max-width: 370px;
     padding-top: 45px;
-    color: #647084;
+    color: #9fa9b8;
     font-size: 15px;
     line-height: 2;
   }
 
   .services-list {
     margin-top: 76px;
-    border-top: 1px solid #cfc0ad;
+    border-top: 1px solid #343b48;
   }
 
   .service-row {
@@ -656,16 +667,16 @@
     min-height: 122px;
     padding: 22px 0;
     border: 0;
-    border-bottom: 1px solid #cfc0ad;
+    border-bottom: 1px solid #343b48;
     background: transparent;
-    color: #162b4d;
+    color: #f7f3ea;
     text-align: right;
     transition: background 180ms ease-out, padding 180ms ease-out;
   }
 
   .service-row:hover {
     padding-inline: 16px;
-    background: #efe4d6;
+    background: #161d29;
   }
 
   .service-number {
@@ -683,7 +694,7 @@
     place-items: center;
     border: 1px solid #c6a45d;
     color: #b96f52;
-    background: #fffaf1;
+    background: #f7f3ea;
   }
 
   .service-main {
@@ -699,14 +710,14 @@
 
   .service-main span {
     max-width: 540px;
-    color: #647084;
+    color: #9fa9b8;
     font-size: 13px;
     line-height: 1.8;
   }
 
   .service-tag {
     justify-self: start;
-    color: #647084;
+    color: #9fa9b8;
     font-size: 11px;
   }
 
@@ -716,14 +727,14 @@
     height: 34px;
     place-items: center;
     border: 1px solid transparent;
-    color: #162b4d;
+    color: #f7f3ea;
     transition: background 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out;
   }
 
   .service-row:hover .service-arrow {
-    border-color: #162b4d;
+    border-color: #f7f3ea;
     background: #162b4d;
-    color: #fffaf1;
+    color: #f7f3ea;
   }
 
   .work-section {
@@ -751,7 +762,7 @@
   }
 
   .work-heading-side > span {
-    color: #647084;
+    color: #9fa9b8;
     font-size: 11px;
   }
 
@@ -759,7 +770,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #162b4d;
+    color: #f7f3ea;
     font-weight: 600;
   }
 
@@ -776,7 +787,7 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: #162b4d;
+    color: #f7f3ea;
     text-align: right;
   }
 
@@ -796,7 +807,7 @@
     position: relative;
     overflow: hidden;
     aspect-ratio: 0.82 / 1;
-    background: #e7dac8;
+    background: #1a2331;
     box-shadow: 8px 8px 0 rgba(22, 43, 77, 0.08);
   }
 
@@ -843,8 +854,8 @@
     align-items: center;
     gap: 7px;
     padding: 7px 10px;
-    background: #fffaf1;
-    color: #162b4d;
+    background: #f7f3ea;
+    color: #f7f3ea;
     font-size: 10px;
     opacity: 0;
     transform: translateY(8px);
@@ -863,12 +874,12 @@
   }
 
   .portfolio-meta > span {
-    color: #b96f52;
-    font-size: 10px;
-    font-weight: 700;
+    color: #f7f3ea;
+    font-size: 11px;
+    font-weight: 600;
   }
 
-  .portfolio-meta strong {
+  .section-index {trong {
     margin-top: 2px;
     font-size: 19px;
     font-weight: 700;
@@ -876,7 +887,7 @@
   }
 
   .portfolio-meta p {
-    color: #647084;
+    color: #9fa9b8;
     font-size: 12px;
   }
 
@@ -901,17 +912,17 @@
     min-height: 174px;
     padding: 24px 22px;
     border-top: 3px solid #162b4d;
-    background: #efe4d6;
+    background: #161d29;
   }
 
   .process-step:nth-child(2) {
     border-top-color: #b96f52;
-    background: #e7dac8;
+    background: #1a2331;
   }
 
   .process-step:nth-child(3) {
     border-top-color: #c6a45d;
-    background: #fffaf1;
+    background: #f7f3ea;
   }
 
   .step-number {
@@ -930,7 +941,7 @@
 
   .process-step p {
     margin-top: 12px;
-    color: #647084;
+    color: #9fa9b8;
     font-size: 13px;
     line-height: 1.9;
   }
@@ -984,7 +995,7 @@
     right: 15px;
     bottom: 13px;
     z-index: 1;
-    color: #fffaf1;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 9px;
   }
@@ -996,7 +1007,7 @@
   .about-copy p {
     max-width: 490px;
     margin-top: 20px;
-    color: #647084;
+    color: #9fa9b8;
     font-size: 15px;
     line-height: 2;
   }
@@ -1022,14 +1033,14 @@
   }
 
   .about-note small {
-    color: #647084;
+    color: #9fa9b8;
   }
 
   .contact-section {
     position: relative;
     overflow: hidden;
     background: #162b4d;
-    color: #fffaf1;
+    color: #f7f3ea;
   }
 
   .contact-pattern {
@@ -1055,7 +1066,7 @@
     place-content: center;
     border: 1px solid rgba(198, 164, 93, 0.72);
     border-radius: 50%;
-    color: #fffaf1;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 10px;
     line-height: 1.45;
@@ -1064,8 +1075,8 @@
   }
 
   .contact-seal-mark {
-    width: 28px;
-    height: 28px;
+    width: 28px !important;
+    height: 28px !important;
     margin-inline: auto;
     color: #c6a45d;
   }
@@ -1094,7 +1105,7 @@
 
   .contact-copy h2 {
     margin-top: 18px;
-    color: #fffaf1;
+    color: #f7f3ea;
     font-size: clamp(36px, 5vw, 62px);
     line-height: 1.4;
   }
@@ -1121,8 +1132,8 @@
     min-height: 58px;
     padding-inline: 24px;
     border: 1px solid #c6a45d;
-    background: #fffaf1;
-    color: #162b4d;
+    background: #f7f3ea;
+    color: #f7f3ea;
     font-family: "Noto Kufi Arabic", sans-serif;
     font-size: 13px;
     font-weight: 700;
@@ -1154,7 +1165,7 @@
     place-items: center;
     border: 1px solid rgba(255, 250, 241, 0.28);
     background: transparent;
-    color: #fffaf1;
+    color: #f7f3ea;
     text-decoration: none;
     transition: border-color 180ms ease-out, background 180ms ease-out;
   }
@@ -1215,7 +1226,7 @@
     border: 1px solid rgba(22, 43, 77, 0.23);
     border-radius: 50%;
     background: transparent;
-    color: #162b4d;
+    color: #f7f3ea;
     animation: cue-bob 2.4s ease-in-out infinite;
   }
 
@@ -1351,8 +1362,8 @@
       flex-direction: column;
       gap: 0;
       padding: 6px;
-      border: 1px solid #d9ccba;
-      background: #fffaf1;
+      border: 1px solid #343b48;
+      background: #f7f3ea;
       box-shadow: 7px 7px 0 rgba(22, 43, 77, 0.12);
     }
 
@@ -1362,7 +1373,7 @@
 
     .desktop-nav button {
       padding: 12px 14px;
-      border-bottom: 1px solid #e7dac8;
+      border-bottom: 1px solid #1a2331;
       text-align: right;
     }
 
@@ -1609,4 +1620,5 @@
       padding: 16px 0;
     }
   }
+}
 }
