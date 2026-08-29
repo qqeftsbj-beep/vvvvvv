@@ -12,12 +12,14 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import TemplateStudio from "./pages/TemplateStudio";
 import OwnerPanel from "./pages/OwnerPanel";
+import OwnerInbox from "./pages/OwnerInbox";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/owner" component={OwnerPanel} />
+      <Route path="/owner/inbox" component={OwnerInbox} />
       <Route path="/templates/gemini">
         <TemplateStudio toolName="Gemini" toolLabel="Gemini" />
       </Route>

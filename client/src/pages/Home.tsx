@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
-import { SiteContent, defaultSiteContent, loadSiteContent } from "@/lib/siteContent";
+import { SiteContent, loadSiteContent } from "@/lib/siteContent";
+import ChatAssistant from "@/components/ChatAssistant";
 
 const whatsappChannel =
   "https://whatsapp.com/channel/0029Vb7dajy8vd1Hr860dd2N";
@@ -470,6 +471,7 @@ export default function Home() {
 
       <div className="side-note" aria-hidden="true">أبو كيان / اليمن</div>
       <button className="scroll-cue" type="button" onClick={() => handleNav("services")} aria-label="انتقل إلى الخدمات"><ChevronDown size={17} /></button>
+      <ChatAssistant />
     </main>
   );
 }

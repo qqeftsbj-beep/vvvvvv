@@ -127,7 +127,7 @@ export default function OwnerPanel() {
           <div className="owner-image-preview"><img src={content.heroImage || defaultSiteContent.heroImage} alt="معاينة صورة البداية" /></div>
         </div>
 
-        <aside className="owner-side-card"><span className="studio-label">حالة الحماية</span><h2>وضع المالك مفتوح</h2><p>أنت الآن في وضع التحرير. الحفظ محلي في هذا المتصفح، بينما تظل المعاينة العامة متاحة للزوار.</p><div className="owner-status"><Check size={16} /> تحرير مسموح</div></aside>
+        <aside className="owner-side-card"><span className="studio-label">حالة الحماية</span><h2>وضع المالك مفتوح</h2><p>أنت الآن في وضع التحرير. الحفظ محلي في هذا المتصفح، بينما تظل المعاينة العامة متاحة للزوار.</p><div className="owner-status"><Check size={16} /> تحرير مسموح</div><Link href="/owner/inbox" className="owner-inbox-link">فتح صندوق الرسائل</Link></aside>
       </section>
 
       <section className="owner-services-card">
