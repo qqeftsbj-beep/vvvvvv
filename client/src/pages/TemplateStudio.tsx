@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
+import { trpc } from "@/lib/trpc";
 
 type Template = {
   id: string;
@@ -26,6 +29,7 @@ type Template = {
   imageData: string;
   imageName: string;
   createdAt?: number;
+  serverId?: number;
 };
 
 type TemplateStudioProps = {
@@ -75,7 +79,13 @@ function readImage(file: File) {
 export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioProps) {
   const [, navigate] = useLocation();
   const storageKey = `abu-kayan-templates-${toolName.toLowerCase().replace(/\s/g, "-")}`;
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const templatesQuery = trpc.templates.list.useQuery({ tool: toolName }, { refetchOnWindowFocus: true, staleTime: 0 });
+  const templates = useMemo<Template[]>(() => (templatesQuery.data || []).map((item) => ({ id: String(item.id), serverId: item.id, text: item.text, imageData: item.imageUrl, imageName: item.imageName, createdAt: new Date(item.createdAt).getTime() })), [templatesQuery.data]);
+  const utils = trpc.useUtils();
+  const createTemplateMutation = trpc.templates.create.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
+  const updateTemplateMutation = trpc.templates.update.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
+  const deleteTemplateMutation = trpc.templates.remove.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
   const [activeId, setActiveId] = useState<string>("");
   const [text, setText] = useState("");
   const [imageData, setImageData] = useState("");
@@ -85,28 +95,14 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const [pin, setPin] = useState("");
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as Template[];
-      if (Array.isArray(parsed)) {
-        const ordered = parsed.map((item, index) => ({ ...item, createdAt: item.createdAt || index + 1 })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        setTemplates(ordered);
-        if (ordered[0]) {
-          setActiveId(ordered[0].id);
-          setText(ordered[0].text);
-          setImageData(ordered[0].imageData);
-          setImageName(ordered[0].imageName);
-        }
-      }
-    } catch {
-      toast.error("تعذر قراءة القوالب المحفوظة في هذا المتصفح.");
+    const first = templates[0];
+    if (!activeId && first) {
+      setActiveId(first.id);
+      setText(first.text);
+      setImageData(first.imageData);
+      setImageName(first.imageName);
     }
-  }, [storageKey]);
-
-  useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(templates));
-  }, [storageKey, templates]);
+  }, [activeId, templates]);
 
   useEffect(() => {
     setIsOwner(window.sessionStorage.getItem(`${storageKey}-owner`) === "true");
@@ -154,30 +150,17 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const saveTemplate = () => {
-    if (!isOwner) {
-      toast("افتح وضع المالك لإضافة أو تعديل القوالب.");
+    if (!isOwner) return toast("افتح وضع المالك لإضافة أو تعديل القوالب.");
+    if (!isAuthenticated) { startLogin(); return; }
+    if (!imageData || !text.trim()) return toast.error("أضف صورة ونصًا قبل حفظ القالب المشترك.");
+    if (activeTemplate?.serverId) {
+      updateTemplateMutation.mutate({ id: activeTemplate.serverId, text: text.trim(), imageName, imageData: imageData.startsWith("data:") ? imageData : undefined });
+      toast.success("تم تحديث القالب المشترك.");
       return;
     }
-    if (!imageData && !text.trim()) {
-      toast.error("أضف صورة أو نصًا قبل حفظ القالب.");
-      return;
-    }
-
-    const template: Template = {
-      id: activeId || makeId(),
-      text: text.trim(),
-      imageData,
-      imageName,
-      createdAt: activeTemplate?.createdAt || Date.now(),
-    };
-
-    setTemplates((current) => {
-      const exists = current.some((item) => item.id === template.id);
-      const next = exists ? current.map((item) => (item.id === template.id ? template : item)) : [template, ...current];
-      return next.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    });
-    setActiveId(template.id);
-    toast.success("تم حفظ القالب على هذا الجهاز.");
+    createTemplateMutation.mutate({ tool: toolName, text: text.trim(), imageData, imageName });
+    setActiveId("");
+    toast.success("تمت إضافة القالب وسيظهر لجميع الزوار.");
   };
 
   const startNewTemplate = () => {
@@ -205,9 +188,11 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       toast("حذف القوالب متاح للمالك فقط.");
       return;
     }
-    setTemplates((current) => current.filter((item) => item.id !== id));
+    if (!isAuthenticated) { startLogin(); return; }
+    const serverId = templates.find((item) => item.id === id)?.serverId;
+    if (serverId) deleteTemplateMutation.mutate({ id: serverId });
     if (id === activeId) startNewTemplate();
-    toast("تم حذف القالب من هذه الصفحة.");
+    toast("تم حذف القالب من المكتبة المشتركة.");
   };
 
   const copyText = async () => {
@@ -319,7 +304,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
 
           <div className={`owner-control ${isOwner ? "is-unlocked" : ""}`}>
             {isOwner ? (
-              <><span><Check size={15} /> وضع المالك مفتوح — يمكنك الإضافة والتعديل</span><button type="button" onClick={lockOwner}>إغلاق</button></>
+              <><span><Check size={15} /> وضع المالك مفتوح — يمكنك الإضافة والتعديل</span>{!authLoading && !isAuthenticated && <button type="button" onClick={startLogin}>تسجيل دخول المالك</button>}<button type="button" onClick={lockOwner}>إغلاق</button></>
             ) : (
               <><span>الإضافة والتعديل للمالك فقط</span><div><input type="password" inputMode="numeric" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="رمز المالك" aria-label="رمز المالك" /><button type="button" onClick={unlockOwner}>فتح وضع المالك</button></div></>
             )}
@@ -352,13 +337,13 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
             <button type="button" className="studio-outline-button" onClick={copyText}>{copied ? <Check size={16} /> : <Clipboard size={16} />} {copied ? "تم النسخ" : "نسخ النص"}</button>
             <button type="button" className="studio-outline-button" onClick={downloadCard}><Download size={16} /> تحميل التصميم</button>
           </div>
-          <p className="studio-note"><RotateCcw size={14} /> القوالب تحفظ محليًا في هذا المتصفح، ويمكنك إضافة العدد الذي تحتاجه دون حد ثابت.</p>
+          <p className="studio-note"><RotateCcw size={14} /> القوالب المشتركة تظهر لجميع الزوار، والإضافة والتعديل متاحان للمالك بعد تسجيل الدخول.</p>
         </div>
 
         <aside className="studio-library">
-          <div className="studio-library-head"><div><span className="studio-label">المكتبة</span><h2>قوالبك المحفوظة <b>{templates.length}</b></h2></div><button type="button" onClick={startNewTemplate} aria-label="إضافة قالب"><Plus size={18} /></button></div>
+          <div className="studio-library-head"><div><span className="studio-label">المكتبة</span><h2>القوالب المشتركة <b>{templates.length}</b></h2></div></div>
           {templates.length === 0 ? (
-            <div className="library-empty"><ImagePlus size={22} /><p>لم تحفظ قالبًا بعد.<br />ابدأ من المساحة المجاورة.</p></div>
+            <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة بعد.<br />سيظهر أحدث قالب هنا أولًا.</p></div>
           ) : (
             <div className="library-list">
               {templates.map((template, index) => (

@@ -13,8 +13,8 @@ import Home from "./pages/Home";
 import TemplateStudio from "./pages/TemplateStudio";
 import OwnerPanel from "./pages/OwnerPanel";
 import OwnerInbox from "./pages/OwnerInbox";
-
 function Router() {
+  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path="/" component={Home} />
