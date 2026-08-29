@@ -23,7 +23,8 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { SiteContent, defaultSiteContent, loadSiteContent } from "@/lib/siteContent";
 
 const whatsappChannel =
   "https://whatsapp.com/channel/0029Vb7dajy8vd1Hr860dd2N";
@@ -101,6 +102,15 @@ function scrollToId(id: string) {
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [brandClicks, setBrandClicks] = useState(0);
+  const [content, setContent] = useState<SiteContent>(() => loadSiteContent());
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const syncContent = () => setContent(loadSiteContent());
+    window.addEventListener("abu-kayan-content-updated", syncContent);
+    return () => window.removeEventListener("abu-kayan-content-updated", syncContent);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.add("motion-ready");
@@ -136,6 +146,17 @@ export default function Home() {
     scrollToId(id);
   };
 
+  const handleBrandClick = () => {
+    setBrandClicks((current) => {
+      const next = current + 1;
+      if (next >= 5) {
+        navigate("/owner");
+        return 0;
+      }
+      return next;
+    });
+  };
+
   return (
     <main dir="rtl" className="site-shell">
       <div className="paper-grain" aria-hidden="true" />
@@ -144,7 +165,7 @@ export default function Home() {
           <button
             type="button"
             className="brand-lockup"
-            onClick={() => handleNav("top")}
+            onClick={handleBrandClick}
             aria-label="العودة إلى بداية الموقع"
           >
             <span className="brand-mark-wrap">
@@ -196,16 +217,15 @@ export default function Home() {
       <section id="top" className="hero-section">
         <div className="hero-content">
           <div className="eyebrow hero-eyebrow">
-            <span className="eyebrow-dot" /> استوديو أبو كيان / اليمن
+            <span className="eyebrow-dot" /> {content.heroEyebrow}
           </div>
           <h1>
-            نخلي فكرتك
-            <em>تُرى</em>
-            قبل أن تتكلم.
+            {content.heroTitle}
+            <em>{content.heroAccent}</em>
+            {content.heroEnding}
           </h1>
           <p className="hero-lead">
-            نصمم حضورًا يليق بمناسبتك أو مشروعك؛ من صورة تهنئة تحفظ اللحظة، إلى
-            إعلان يصل للشخص الصح، إلى صفحة هبوط تعرف كيف تقنع.
+            {content.heroLead}
           </p>
           <div className="hero-actions">
             <button
@@ -213,14 +233,14 @@ export default function Home() {
               className="button button-primary"
               onClick={() => handleNav("contact")}
             >
-              احكِ لنا عن فكرتك <ArrowLeft size={17} />
+              {content.primaryButton} <ArrowLeft size={17} />
             </button>
             <button
               type="button"
               className="button button-quiet"
               onClick={() => handleNav("work")}
             >
-              <Play size={15} fill="currentColor" /> شاهد الأعمال
+              <Play size={15} fill="currentColor" /> {content.secondaryButton}
             </button>
           </div>
           <div className="ai-tool-actions" aria-label="أدوات التصميم بالذكاء الاصطناعي">
@@ -244,7 +264,7 @@ export default function Home() {
           <div className="hero-art-label label-top">01 / 03</div>
           <div className="hero-art-frame">
             <img
-              src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg"
+              src={content.heroImage}
               alt="شعار أبو كيان الجنيد الأصلي"
               className="hero-logo-art"
             />
@@ -296,8 +316,8 @@ export default function Home() {
         </div>
 
         <div className="services-list">
-          {services.map((service) => {
-            const Icon = service.icon;
+          {content.services.map((service, index) => {
+            const Icon = [Sparkles, Megaphone, LayoutTemplate][index % 3];
             return (
               <button
                 type="button"

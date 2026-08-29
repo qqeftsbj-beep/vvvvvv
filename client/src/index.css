@@ -2004,3 +2004,80 @@
   .hero-art-caption { font-size: 9px; }
   .service-ribbon { width: 100%; }
 }
+
+/*
+  Design reminder — Hidden owner panel:
+  Dark luxury control room with clear labels, strong focus states, and mobile-first editing.
+*/
+.owner-page { min-height: 100vh; padding: 0 5vw 90px; background: radial-gradient(circle at 10% 8%, rgba(198,164,93,.12), transparent 25rem), #0b0e14; color: #f7f3ea; }
+.owner-page input, .owner-page textarea { width: 100%; border: 1px solid #343b48; outline: none; background: #111722; color: #f7f3ea; font: inherit; }
+.owner-page input { min-height: 42px; padding: 0 12px; }
+.owner-page textarea { min-height: 110px; padding: 12px; resize: vertical; line-height: 1.8; }
+.owner-page input:focus, .owner-page textarea:focus { border-color: #c6a45d; box-shadow: 0 0 0 3px rgba(198,164,93,.1); }
+.owner-lock-page { display: grid; place-items: center; padding: 24px; }
+.owner-lock-card { width: min(100%, 420px); padding: 32px; border: 1px solid #343b48; background: #141a24; box-shadow: 12px 12px 0 rgba(198,164,93,.08); text-align: center; }
+.owner-lock-icon { display: grid; width: 54px; height: 54px; margin: 0 auto 18px; place-items: center; border: 1px solid #c6a45d; border-radius: 50%; color: #c6a45d; }
+.owner-lock-card h1, .owner-header h1, .owner-main-card h2, .owner-side-card h2, .owner-services-card h2 { margin: 10px 0 0; font-family: "Noto Kufi Arabic", sans-serif; letter-spacing: -.07em; }
+.owner-lock-card h1 { font-size: 27px; }
+.owner-lock-card p, .owner-side-card p { color: #9fa9b8; font-size: 12px; line-height: 1.9; }
+.owner-lock-card input { margin-top: 22px; text-align: center; letter-spacing: .25em; }
+.owner-save, .owner-add, .owner-logout { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 14px; border: 1px solid #c6a45d; background: #c6a45d; color: #0b0e14; font-size: 11px; font-weight: 700; }
+.owner-lock-card .owner-save { width: 100%; margin-top: 12px; }
+.owner-back { display: inline-flex; align-items: center; gap: 7px; margin-top: 19px; color: #9fa9b8; font-size: 11px; text-decoration: none; }
+.owner-back:hover { color: #f7f3ea; }
+.owner-header { display: flex; align-items: center; justify-content: space-between; width: min(100%, 1220px); min-height: 98px; margin-inline: auto; border-bottom: 1px solid #343b48; }
+.owner-header h1 { font-size: 26px; }
+.owner-header-actions { display: flex; align-items: center; gap: 14px; }
+.owner-header-actions .owner-back { margin: 0; }
+.owner-logout { min-height: 34px; border-color: #667085; background: transparent; color: #f7f3ea; }
+.owner-grid, .owner-services-card { width: min(100%, 1220px); margin: 24px auto 0; }
+.owner-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.owner-main-card, .owner-side-card, .owner-services-card { padding: 24px; border: 1px solid #343b48; background: rgba(20,26,36,.86); box-shadow: 10px 10px 0 rgba(198,164,93,.05); }
+.owner-side-card { position: sticky; top: 20px; }
+.owner-side-card h2 { font-size: 18px; }
+.owner-side-card p { margin-top: 14px; }
+.owner-status { display: inline-flex; align-items: center; gap: 7px; margin-top: 18px; padding: 8px 10px; border: 1px solid rgba(198,164,93,.4); color: #c6a45d; font-size: 10px; }
+.owner-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.owner-card-heading h2 { font-size: 21px; }
+.owner-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px; }
+.owner-fields label, .owner-service-row label { display: grid; gap: 7px; }
+.owner-fields label > span, .owner-service-row label > span { color: #c6a45d; font-size: 10px; }
+.owner-wide { grid-column: 1 / -1; position: relative; }
+.owner-wide small { color: #667085; font-size: 10px; text-align: left; }
+.owner-image-upload { display: flex; align-items: center; gap: 12px; margin-top: 19px; padding: 13px; border: 1px dashed #667085; color: #c6a45d; cursor: pointer; }
+.owner-image-upload input { display: none; }
+.owner-image-upload small { color: #9fa9b8; font-size: 10px; }
+.owner-image-preview { overflow: hidden; height: 180px; margin-top: 13px; border: 1px solid #343b48; background: #0b0e14; }
+.owner-image-preview img { width: 100%; height: 100%; object-fit: contain; }
+.owner-services-card { margin-top: 24px; }
+.owner-service-list { display: grid; gap: 12px; margin-top: 22px; }
+.owner-service-row { display: grid; grid-template-columns: 42px 1fr 1.4fr 1fr 35px; gap: 10px; align-items: start; padding: 14px 0; border-top: 1px solid #343b48; }
+.owner-service-number { color: #c98567; font-size: 12px; }
+.owner-delete { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #343b48; background: transparent; color: #c98567; }
+.owner-delete:hover { border-color: #c98567; background: rgba(201,133,103,.1); }
+.owner-save-bottom { margin-top: 22px; }
+.owner-add:hover, .owner-save:hover { filter: brightness(1.08); }
+
+@media (max-width: 800px) {
+  .owner-page { padding-inline: 16px; }
+  .owner-header { min-height: 82px; }
+  .owner-header h1 { font-size: 21px; }
+  .owner-header-actions { gap: 9px; }
+  .owner-header-actions .owner-back { font-size: 10px; }
+  .owner-grid { grid-template-columns: 1fr; }
+  .owner-side-card { position: static; order: -1; }
+  .owner-service-row { grid-template-columns: 35px 1fr 35px; }
+  .owner-service-row label:nth-of-type(2) { grid-column: 2 / -1; }
+  .owner-service-row label:nth-of-type(3) { grid-column: 2 / -1; }
+  .owner-delete { grid-column: 3; grid-row: 1; }
+}
+
+@media (max-width: 520px) {
+  .owner-lock-card, .owner-main-card, .owner-side-card, .owner-services-card { padding: 18px; }
+  .owner-card-heading { display: block; }
+  .owner-card-heading .owner-save, .owner-card-heading .owner-add { width: 100%; margin-top: 14px; }
+  .owner-fields { grid-template-columns: 1fr; gap: 13px; }
+  .owner-wide { grid-column: auto; }
+  .owner-image-upload { align-items: flex-start; flex-direction: column; }
+  .owner-header-actions .owner-back { display: none; }
+}

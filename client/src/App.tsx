@@ -11,11 +11,13 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import TemplateStudio from "./pages/TemplateStudio";
+import OwnerPanel from "./pages/OwnerPanel";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/owner" component={OwnerPanel} />
       <Route path="/templates/gemini">
         <TemplateStudio toolName="Gemini" toolLabel="Gemini" />
       </Route>
