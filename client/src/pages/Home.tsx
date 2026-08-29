@@ -4,7 +4,7 @@
   asymmetric editorial composition, tactile portfolio cards, direct and warm copy.
 */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpLeft,
@@ -100,6 +100,31 @@ function scrollToId(id: string) {
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.add("motion-ready");
+    const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+
+    if (!("IntersectionObserver" in window)) {
+      targets.forEach((target) => target.classList.add("is-visible"));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+    );
+
+    targets.forEach((target) => observer.observe(target));
+    return () => observer.disconnect();
+  }, []);
 
   const handlePlaceholder = (label: string) => {
     toast(`${label} متاح ضمن المعاينة، وسيُربط بعد اعتماد النسخة النهائية.`);
@@ -214,9 +239,9 @@ export default function Home() {
           <div className="hero-art-label label-top">01 / 03</div>
           <div className="hero-art-frame">
             <img
-              src="/manus-storage/abu-kayan-hero-reference_9ccb77f8.png"
-              alt="تركيب بصري من الورق النيلي والرمل والذهبي"
-              className="hero-art"
+              src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg"
+              alt="شعار أبو كيان الجنيد الأصلي"
+              className="hero-logo-art"
             />
             <div className="hero-art-overlay" />
             <div className="hero-art-caption">
@@ -251,7 +276,7 @@ export default function Home() {
         <span>هويات وشعارات</span>
       </div>
 
-      <section id="services" className="section services-section">
+      <section id="services" className="section services-section" data-reveal>
         <span className="section-ghost" aria-hidden="true">02</span>
         <div className="section-intro">
           <span className="section-index">/ 02</span>
@@ -272,6 +297,7 @@ export default function Home() {
               <button
                 type="button"
                 className="service-row"
+                data-reveal
                 key={service.number}
                 onClick={() => handlePlaceholder(`خدمة ${service.title}`)}
               >
@@ -289,7 +315,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="work" className="section work-section">
+      <section id="work" className="section work-section" data-reveal>
         <span className="section-ghost" aria-hidden="true">03</span>
         <div className="work-heading">
           <div>
@@ -309,6 +335,7 @@ export default function Home() {
             <button
               type="button"
               className={`portfolio-card ${item.tone} ${index === 1 ? "portfolio-featured" : ""}`}
+              data-reveal
               key={item.title}
               onClick={() => handlePlaceholder(item.title)}
             >
@@ -326,7 +353,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="process" className="section process-section">
+      <section id="process" className="section process-section" data-reveal>
         <span className="section-ghost" aria-hidden="true">04</span>
         <div className="process-head">
           <span className="section-index">/ 04</span>
@@ -340,7 +367,7 @@ export default function Home() {
           </p>
         </div>
         <div className="process-steps">
-          <div className="process-step">
+          <div className="process-step" data-reveal>
             <span className="step-number">01</span>
             <div>
               <strong>نسمع الفكرة</strong>
@@ -348,7 +375,7 @@ export default function Home() {
             </div>
             <Check size={18} />
           </div>
-          <div className="process-step">
+          <div className="process-step" data-reveal>
             <span className="step-number">02</span>
             <div>
               <strong>نرتب المشهد</strong>
@@ -356,7 +383,7 @@ export default function Home() {
             </div>
             <Check size={18} />
           </div>
-          <div className="process-step">
+          <div className="process-step" data-reveal>
             <span className="step-number">03</span>
             <div>
               <strong>نسلم الأثر</strong>
@@ -367,7 +394,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="about-strip" aria-label="عن الاستوديو">
+      <section className="about-strip" aria-label="عن الاستوديو" data-reveal>
         <div className="about-image-wrap">
           <img src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" alt="هوية أبو كيان الجنيد البصرية" className="about-image" />
           <span>رائد الجنيد / 2026</span>
@@ -384,7 +411,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="contact" className="contact-section">
+      <section id="contact" className="contact-section" data-reveal>
         <div className="contact-pattern" aria-hidden="true" />
         <div className="contact-seal" aria-hidden="true">
           <BrandSeal className="contact-seal-mark" />
