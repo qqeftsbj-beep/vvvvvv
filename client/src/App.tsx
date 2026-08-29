@@ -10,11 +10,18 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import TemplateStudio from "./pages/TemplateStudio";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/templates/gemini">
+        <TemplateStudio toolName="Gemini" toolLabel="Gemini" />
+      </Route>
+      <Route path="/templates/chat-gbt">
+        <TemplateStudio toolName="Chat GBT" toolLabel="Chat GBT" />
+      </Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

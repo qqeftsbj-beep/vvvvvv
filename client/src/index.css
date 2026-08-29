@@ -1633,3 +1633,277 @@
   }
 }
 }
+
+/*
+  Design reminder — Template Studio:
+  Midnight matte panels, antique-gold action buttons, silver text, and a calm editor layout.
+  The tool page should feel like a private luxury workbench, not a generic form.
+*/
+
+.studio-page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  padding: 0 5vw 90px;
+  background:
+    radial-gradient(circle at 8% 5%, rgba(198, 164, 93, 0.13), transparent 23rem),
+    radial-gradient(circle at 90% 30%, rgba(201, 133, 103, 0.08), transparent 24rem),
+    #0b0e14;
+  color: #f7f3ea;
+}
+
+.studio-page::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  content: "";
+  background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 80%);
+}
+
+.studio-header,
+.studio-hero,
+.studio-layout {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 1220px);
+  margin-inline: auto;
+}
+
+.studio-header {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(198, 164, 93, 0.2);
+}
+
+.studio-back,
+.studio-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #9fa9b8;
+  font-size: 12px;
+  text-decoration: none;
+  transition: color 180ms ease-out;
+}
+
+.studio-back:hover { color: #f7f3ea; }
+.studio-brand { color: #c6a45d; font-family: "Noto Kufi Arabic", sans-serif; font-size: 13px; font-weight: 700; }
+
+.studio-hero {
+  padding: 80px 0 56px;
+}
+
+.studio-kicker,
+.studio-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #c98567;
+  font-family: "Noto Kufi Arabic", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.studio-kicker span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c6a45d;
+  box-shadow: 0 0 0 4px rgba(198, 164, 93, 0.14);
+}
+
+.studio-hero h1 {
+  max-width: 650px;
+  margin: 20px 0 0;
+  color: #f7f3ea;
+  font-family: "Noto Kufi Arabic", sans-serif;
+  font-size: clamp(40px, 6vw, 75px);
+  font-weight: 800;
+  letter-spacing: -0.1em;
+  line-height: 1.35;
+}
+
+.studio-hero h1 em { color: #c98567; font-style: normal; }
+.studio-hero > p { max-width: 520px; margin-top: 19px; color: #9fa9b8; font-size: 16px; line-height: 2; }
+
+.studio-steps {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  margin-top: 32px;
+  color: #9fa9b8;
+  font-size: 11px;
+}
+
+.studio-steps span { display: inline-flex; align-items: center; gap: 7px; }
+.studio-steps b { color: #c6a45d; font-family: "Noto Kufi Arabic", sans-serif; font-size: 10px; }
+.studio-steps i { width: 28px; height: 1px; background: #343b48; }
+
+.studio-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.42fr) minmax(270px, 0.58fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.studio-editor-panel,
+.studio-library {
+  border: 1px solid #343b48;
+  background: rgba(20, 26, 36, 0.82);
+  box-shadow: 14px 14px 0 rgba(198, 164, 93, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.studio-editor-panel { padding: 26px; }
+.studio-library { padding: 22px; }
+.studio-panel-top,
+.studio-library-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.studio-panel-top h2,
+.studio-library h2 { margin: 7px 0 0; color: #f7f3ea; font-family: "Noto Kufi Arabic", sans-serif; font-size: 20px; font-weight: 700; letter-spacing: -0.06em; }
+.studio-library h2 b { color: #c6a45d; font-size: 13px; }
+
+.studio-ghost-button,
+.studio-library-head > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #343b48;
+  background: transparent;
+  color: #c6a45d;
+  font-size: 11px;
+  transition: border-color 180ms ease-out, background 180ms ease-out;
+}
+
+.studio-ghost-button { min-height: 36px; padding-inline: 11px; }
+.studio-library-head > button { width: 33px; height: 33px; justify-content: center; }
+.studio-ghost-button:hover,
+.studio-library-head > button:hover { border-color: #c6a45d; background: rgba(198, 164, 93, 0.1); }
+
+.upload-zone {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  min-height: 320px;
+  margin-top: 24px;
+  place-items: center;
+  border: 1px dashed #667085;
+  background: linear-gradient(135deg, rgba(22, 43, 77, 0.24), rgba(11, 14, 20, 0.82));
+  color: #f7f3ea;
+  cursor: pointer;
+  transition: border-color 180ms ease-out, background 180ms ease-out, transform 180ms ease-out;
+}
+
+.upload-zone:hover { border-color: #c6a45d; background: linear-gradient(135deg, rgba(22, 43, 77, 0.42), rgba(11, 14, 20, 0.82)); transform: translateY(-2px); }
+.upload-zone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.upload-empty { display: grid; place-items: center; gap: 7px; color: #9fa9b8; }
+.upload-empty > svg { color: #c6a45d; }
+.upload-empty strong { color: #f7f3ea; font-family: "Noto Kufi Arabic", sans-serif; font-size: 14px; }
+.upload-empty small { font-size: 11px; }
+.upload-chip { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 7px 11px; border: 1px solid #c6a45d; color: #c6a45d; font-size: 10px; }
+.studio-upload-preview { display: block; width: 100%; height: 100%; max-height: 430px; object-fit: contain; }
+.file-name { overflow: hidden; margin-top: 8px; color: #9fa9b8; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+.studio-field { position: relative; display: grid; gap: 9px; margin-top: 23px; }
+.studio-field > span { color: #f7f3ea; font-family: "Noto Kufi Arabic", sans-serif; font-size: 12px; font-weight: 700; }
+.studio-field textarea { min-height: 134px; resize: vertical; padding: 14px; border: 1px solid #343b48; outline: none; background: #0b0e14; color: #f7f3ea; font-family: "IBM Plex Sans Arabic", sans-serif; font-size: 14px; line-height: 1.9; transition: border-color 180ms ease-out, box-shadow 180ms ease-out; }
+.studio-field textarea::placeholder { color: #667085; }
+.studio-field textarea:focus { border-color: #c6a45d; box-shadow: 0 0 0 3px rgba(198, 164, 93, 0.1); }
+.studio-field small { position: absolute; left: 9px; bottom: 9px; color: #667085; font-size: 10px; }
+
+.studio-action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.studio-primary-button,
+.studio-outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 45px; padding-inline: 14px; border: 1px solid #c6a45d; font-size: 11px; transition: transform 160ms ease-out, background 180ms ease-out, color 180ms ease-out; }
+.studio-primary-button { background: #c6a45d; color: #0b0e14; font-weight: 700; }
+.studio-outline-button { border-color: #667085; background: transparent; color: #f7f3ea; }
+.studio-primary-button:hover { background: #e2bf72; transform: translateY(-2px); }
+.studio-outline-button:hover { border-color: #c6a45d; color: #c6a45d; transform: translateY(-2px); }
+.studio-primary-button:active, .studio-outline-button:active { transform: scale(0.97); }
+.studio-note { display: flex; align-items: center; gap: 7px; margin-top: 17px; color: #667085; font-size: 10px; }
+.studio-note svg { color: #c98567; }
+
+.studio-library-head { padding-bottom: 20px; border-bottom: 1px solid #343b48; }
+.library-empty { display: grid; min-height: 260px; place-items: center; align-content: center; gap: 11px; color: #667085; text-align: center; }
+.library-empty svg { color: #c6a45d; }
+.library-empty p { font-size: 12px; line-height: 1.9; }
+.library-list { display: grid; gap: 9px; padding-top: 16px; }
+.library-item { display: flex; align-items: center; gap: 7px; padding: 8px; border: 1px solid transparent; transition: border-color 180ms ease-out, background 180ms ease-out; }
+.library-item:hover, .library-item.is-active { border-color: #343b48; background: #161d29; }
+.library-select { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; color: #f7f3ea; text-align: right; }
+.library-thumb { display: grid; width: 48px; height: 56px; flex: 0 0 auto; place-items: center; overflow: hidden; border: 1px solid #343b48; background: #0b0e14; color: #c6a45d; }
+.library-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.library-select b, .library-select small { display: block; }
+.library-select b { color: #c6a45d; font-family: "Noto Kufi Arabic", sans-serif; font-size: 10px; }
+.library-select small { overflow: hidden; max-width: 145px; margin-top: 5px; color: #9fa9b8; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.library-delete { display: grid; width: 28px; height: 28px; place-items: center; border: 0; background: transparent; color: #667085; transition: color 180ms ease-out; }
+.library-delete:hover { color: #c98567; }
+
+.studio-orbit { position: absolute; border: 1px solid rgba(198, 164, 93, 0.2); border-radius: 50%; pointer-events: none; }
+.studio-orbit-one { top: 180px; left: -160px; width: 430px; height: 430px; }
+.studio-orbit-two { right: -220px; bottom: 80px; width: 530px; height: 530px; border-color: rgba(201, 133, 103, 0.14); }
+
+@media (max-width: 860px) {
+  .studio-page { padding-inline: 20px; }
+  .studio-layout { grid-template-columns: 1fr; }
+  .studio-library { order: -1; }
+  .studio-library-head { border-bottom: 0; padding-bottom: 0; }
+  .library-list { display: flex; overflow-x: auto; padding-top: 13px; padding-bottom: 6px; }
+  .library-item { min-width: 215px; }
+}
+
+@media (max-width: 560px) {
+  .studio-header { min-height: 70px; }
+  .studio-brand { font-size: 11px; }
+  .studio-hero { padding: 55px 0 38px; }
+  .studio-hero h1 { font-size: clamp(35px, 12vw, 54px); }
+  .studio-hero > p { font-size: 14px; }
+  .studio-editor-panel { padding: 16px; }
+  .studio-panel-top { display: block; }
+  .studio-ghost-button { margin-top: 14px; }
+  .upload-zone { min-height: 270px; }
+  .studio-action-row { display: grid; grid-template-columns: 1fr 1fr; }
+  .studio-primary-button { grid-column: 1 / -1; }
+  .studio-note { align-items: flex-start; line-height: 1.7; }
+}
+
+/* AI tool actions — gold buttons are reserved for clear, high-intent creation paths. */
+.ai-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.ai-tool-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 45px;
+  padding: 0 14px;
+  border: 1px solid #c6a45d;
+  background: linear-gradient(135deg, #f0cf7c, #c6a45d);
+  color: #0b0e14;
+  font-family: "Noto Kufi Arabic", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 4px 4px 0 #c98567;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms ease-out, filter 180ms ease-out;
+}
+
+.ai-tool-button:hover {
+  filter: brightness(1.08);
+  box-shadow: 1px 1px 0 #c98567;
+  transform: translate(3px, 3px);
+}
+
+.ai-tool-button:active { transform: scale(0.97); }
+
+@media (max-width: 700px) {
+  .ai-tool-actions { display: grid; width: 100%; }
+  .ai-tool-button { justify-content: space-between; }
+}

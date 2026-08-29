@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
 const whatsappChannel =
   "https://whatsapp.com/channel/0029Vb7dajy8vd1Hr860dd2N";
@@ -221,6 +222,10 @@ export default function Home() {
             >
               <Play size={15} fill="currentColor" /> شاهد الأعمال
             </button>
+          </div>
+          <div className="ai-tool-actions" aria-label="أدوات التصميم بالذكاء الاصطناعي">
+            <Link href="/templates/gemini" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Gemini <ArrowLeft size={15} /></Link>
+            <Link href="/templates/chat-gbt" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Chat GBT <ArrowLeft size={15} /></Link>
           </div>
           <div className="hero-proof">
             <div className="proof-avatars" aria-hidden="true">
