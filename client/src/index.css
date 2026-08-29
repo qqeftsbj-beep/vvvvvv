@@ -2129,3 +2129,68 @@
 .inbox-lead a { display: inline-block; margin-top: 5px; color: #c6a45d; font-size: 11px; direction: ltr; text-decoration: none; }
 .inbox-lead p { margin: 0; color: #d7dce5; font-size: 12px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 650px) { .inbox-lead { grid-template-columns: 1fr 35px; gap: 10px; } .inbox-lead p { grid-column: 1 / -1; padding-top: 9px; border-top: 1px solid #343b48; } }
+
+/*
+  Design reminder — Responsive control surfaces:
+  Reduce density on small screens, preserve hierarchy, and keep filters touch-friendly.
+*/
+.inbox-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; padding: 14px; border: 1px solid #343b48; background: #111722; }
+.inbox-filters label { display: grid; gap: 6px; min-width: 170px; }
+.inbox-filters span, .inbox-status span { color: #c6a45d; font-size: 10px; }
+.inbox-filters select, .inbox-status select { min-height: 38px; padding: 0 10px; border: 1px solid #343b48; background: #0b0e14; color: #f7f3ea; font: inherit; font-size: 11px; outline: none; }
+.inbox-filters select:focus, .inbox-status select:focus { border-color: #c6a45d; }
+.inbox-lead-body { display: grid; gap: 10px; min-width: 0; }
+.inbox-status { display: inline-grid; grid-template-columns: auto minmax(130px, 190px); align-items: center; gap: 8px; }
+.status-chip { display: inline-flex; align-items: center; gap: 5px; justify-self: start; width: fit-content; padding: 5px 8px; border: 1px solid #343b48; font-size: 9px; font-weight: 600; }
+.status-new { color: #c6a45d; border-color: rgba(198,164,93,.45); }
+.status-contacted { color: #91b9d5; border-color: rgba(145,185,213,.45); }
+.status-completed { color: #9ec49a; border-color: rgba(158,196,154,.45); }
+.owner-card-heading h2 b { color: #c6a45d; font-weight: 600; }
+.owner-card-heading h2 b small { color: #667085; font-family: "IBM Plex Sans Arabic", sans-serif; font-size: 10px; font-weight: 400; }
+
+@media screen and (max-width: 700px) {
+  .site-shell { width: 100%; overflow-x: hidden; }
+  .site-shell .site-header { padding-inline: 0; }
+  .site-shell .brand-lockup { min-width: 0; max-width: 170px; }
+  .site-shell .header-cta { min-width: 0; max-width: 112px; padding-inline: 10px; font-size: 9px; }
+  .site-shell .hero-section { gap: 28px; padding-top: 42px; }
+  .site-shell .hero-content h1 { font-size: clamp(32px, 9.4vw, 43px); line-height: 1.45; }
+  .site-shell .hero-lead { font-size: 12px; line-height: 2.05; }
+  .site-shell .ai-tool-button { font-size: 10px; min-height: 44px; }
+  .site-shell .section-intro h2, .site-shell .work-heading h2, .site-shell .process-head h2 { font-size: clamp(25px, 7.6vw, 36px); line-height: 1.55; }
+  .site-shell .service-row { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; }
+  .site-shell .service-main strong { font-size: 14px; }
+  .site-shell .service-main span { font-size: 10px; }
+  .site-shell .service-tag { font-size: 9px; }
+  .site-shell .work-grid { grid-template-columns: 1fr; }
+  .site-shell .process-grid { grid-template-columns: 1fr; }
+  .site-shell .contact-panel { padding: 22px 17px; }
+  .site-shell .contact-panel h2 { font-size: clamp(25px, 7.8vw, 36px); line-height: 1.5; }
+  .site-shell .chat-trigger { font-size: 10px; }
+  .owner-page { overflow-x: hidden; }
+  .inbox-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 11px; }
+  .inbox-filters label { min-width: 0; }
+  .inbox-filters select { width: 100%; font-size: 10px; }
+  .inbox-lead-body { grid-column: 1 / -1; }
+  .inbox-status { grid-template-columns: 1fr; gap: 5px; }
+  .inbox-status select { width: 100%; }
+}
+
+@media screen and (max-width: 430px) {
+  .site-shell .header-inner { width: calc(100% - 24px); gap: 7px; }
+  .site-shell .brand-mark-wrap { width: 34px; height: 34px; }
+  .site-shell .brand-copy strong { font-size: 11px; }
+  .site-shell .brand-copy span { font-size: 8px; }
+  .site-shell .header-cta { display: none; }
+  .site-shell .hero-section { width: calc(100% - 24px); padding-top: 34px; }
+  .site-shell .hero-content h1 { font-size: clamp(30px, 9vw, 39px); }
+  .site-shell .hero-eyebrow { font-size: 9px; }
+  .site-shell .hero-lead { font-size: 11px; }
+  .site-shell .hero-art-frame { aspect-ratio: .9 / 1; }
+  .chat-assistant { right: 12px; left: 12px; bottom: 12px; }
+  .chat-trigger { min-height: 42px; padding-inline: 13px; }
+  .owner-page { padding-inline: 12px; }
+  .owner-header { width: 100%; }
+  .owner-header h1 { font-size: 18px; }
+  .inbox-filters { grid-template-columns: 1fr; }
+}

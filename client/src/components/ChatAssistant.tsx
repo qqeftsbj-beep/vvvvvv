@@ -7,12 +7,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { Bot, Check, MessageCircle, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
+export type LeadStatus = "new" | "contacted" | "completed";
+
 export type InboxLead = {
   id: string;
   name: string;
   phone: string;
   request: string;
   source: string;
+  status: LeadStatus;
   createdAt: string;
 };
 
@@ -86,6 +89,7 @@ export default function ChatAssistant() {
         phone: lead.phone || "غير محدد",
         request: value,
         source: "المحادثة التجريبية",
+        status: "new",
         createdAt: new Date().toISOString(),
       };
       saveLead(nextLead);
