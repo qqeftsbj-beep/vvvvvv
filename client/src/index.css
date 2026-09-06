@@ -2321,3 +2321,9 @@
 .owner-empty { color: var(--text-muted); font-size: 11px; }
 @media (max-width: 780px) { .owner-editor-grid, .settings-fields { grid-template-columns: 1fr; } .product-grid { grid-template-columns: 1fr; } .owner-button-row { grid-template-columns: 1fr 1fr; } .owner-button-row .owner-delete { align-self: end; } .custom-hero-actions { display: grid; grid-template-columns: 1fr; } .custom-site-button { justify-content: center; width: 100%; } }
 @media (max-width: 430px) { .owner-button-row { grid-template-columns: 1fr; } }
+
+.owner-template-password { margin-top: 14px; padding: 13px; border: 1px solid rgba(198,164,93,.26); background: rgba(198,164,93,.045); }
+.owner-template-password label { display: grid; gap: 7px; }
+.owner-template-password label > span { color: #c6a45d; font-size: 10px; }
+.owner-template-password small { display: block; margin-top: 8px; color: #9fa9b8; font-size: 10px; line-height: 1.7; }
+.studio-primary-button:disabled { cursor: wait; opacity: .65; transform: none; box-shadow: 3px 3px 0 #a66d59; }

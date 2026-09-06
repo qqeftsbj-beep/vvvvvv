@@ -36,6 +36,7 @@ export type SiteSettings = {
   accentColor: string;
   goldColor: string;
   backgroundImage: string;
+  templatePassword: string;
 };
 
 export type SiteContent = {
@@ -80,6 +81,7 @@ export const defaultSiteContent: SiteContent = {
     accentColor: "#ca8467",
     goldColor: "#d5b36a",
     backgroundImage: "",
+    templatePassword: "7705",
   },
 };
 

@@ -4,7 +4,7 @@
   clear Arabic RTL hierarchy, restrained motion, and no dependence on a backend for preview work.
 */
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import React, { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -17,11 +17,12 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
+import { loadSiteContent } from "@/lib/siteContent";
 
 type Template = {
   id: string;
@@ -37,12 +38,19 @@ type TemplateStudioProps = {
   toolLabel: string;
 };
 
-const MAX_TEXT_LENGTH = 10000;
-const OWNER_PIN = "7705";
+export type TemplateDraftState = {
+  activeId: string;
+  text: string;
+  imageData: string;
+  imageName: string;
+  copied: boolean;
+};
 
-function makeId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+export function emptyTemplateDraft(): TemplateDraftState {
+  return { activeId: "", text: "", imageData: "", imageName: "", copied: false };
 }
+
+const MAX_TEXT_LENGTH = 10000;
 
 function wrapCanvasText(
   context: CanvasRenderingContext2D,
@@ -77,7 +85,6 @@ function readImage(file: File) {
 }
 
 export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioProps) {
-  const [, navigate] = useLocation();
   const storageKey = `abu-kayan-templates-${toolName.toLowerCase().replace(/\s/g, "-")}`;
   const { isAuthenticated, loading: authLoading } = useAuth();
   const templatesQuery = trpc.templates.list.useQuery({ tool: toolName }, { refetchOnWindowFocus: true, staleTime: 0 });
@@ -93,20 +100,18 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const [copied, setCopied] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [pin, setPin] = useState("");
-
-  useEffect(() => {
-    const first = templates[0];
-    if (!activeId && first) {
-      setActiveId(first.id);
-      setText(first.text);
-      setImageData(first.imageData);
-      setImageName(first.imageName);
-    }
-  }, [activeId, templates]);
+  const [templatePassword, setTemplatePassword] = useState(() => loadSiteContent().settings.templatePassword);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setIsOwner(window.sessionStorage.getItem(`${storageKey}-owner`) === "true");
   }, [storageKey]);
+
+  useEffect(() => {
+    const syncTemplatePassword = () => setTemplatePassword(loadSiteContent().settings.templatePassword);
+    window.addEventListener("abu-kayan-content-updated", syncTemplatePassword);
+    return () => window.removeEventListener("abu-kayan-content-updated", syncTemplatePassword);
+  }, []);
 
   const activeTemplate = useMemo(
     () => templates.find((template) => template.id === activeId),
@@ -114,7 +119,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   );
 
   const unlockOwner = () => {
-    if (pin === OWNER_PIN) {
+    if (pin === templatePassword) {
       setIsOwner(true);
       window.sessionStorage.setItem(`${storageKey}-owner`, "true");
       setPin("");
@@ -150,17 +155,37 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const saveTemplate = () => {
+    if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
     if (!isOwner) return toast("افتح وضع المالك لإضافة أو تعديل القوالب.");
     if (!isAuthenticated) { startLogin(); return; }
     if (!imageData || !text.trim()) return toast.error("أضف صورة ونصًا قبل حفظ القالب المشترك.");
     if (activeTemplate?.serverId) {
-      updateTemplateMutation.mutate({ id: activeTemplate.serverId, text: text.trim(), imageName, imageData: imageData.startsWith("data:") ? imageData : undefined });
-      toast.success("تم تحديث القالب المشترك.");
+      updateTemplateMutation.mutate(
+        { id: activeTemplate.serverId, text: text.trim(), imageName, imageData: imageData.startsWith("data:") ? imageData : undefined },
+        { onSuccess: () => toast.success("تم تحديث القالب المشترك."), onError: () => toast.error("تعذر تحديث القالب المشترك.") },
+      );
       return;
     }
-    createTemplateMutation.mutate({ tool: toolName, text: text.trim(), imageData, imageName });
-    setActiveId("");
-    toast.success("تمت إضافة القالب وسيظهر لجميع الزوار.");
+    createTemplateMutation.mutate(
+      { tool: toolName, text: text.trim(), imageData, imageName },
+      {
+        onSuccess: () => {
+          startNewTemplate();
+          toast.success("تمت إضافة القالب وسيظهر لجميع الزوار. يمكنك الآن إنشاء قالب جديد.");
+        },
+        onError: () => toast.error("تعذر حفظ القالب المشترك. حاول مرة أخرى."),
+      },
+    );
+  };
+
+  const resetEditor = () => {
+    const empty = emptyTemplateDraft();
+    setActiveId(empty.activeId);
+    setText(empty.text);
+    setImageData(empty.imageData);
+    setImageName(empty.imageName);
+    setCopied(empty.copied);
+    if (uploadInputRef.current) uploadInputRef.current.value = "";
   };
 
   const startNewTemplate = () => {
@@ -168,11 +193,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       toast("إنشاء قالب جديد متاح للمالك فقط.");
       return;
     }
-    setActiveId("");
-    setText("");
-    setImageData("");
-    setImageName("");
-    setCopied(false);
+    resetEditor();
   };
 
   const selectTemplate = (template: Template) => {
@@ -306,12 +327,12 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
             {isOwner ? (
               <><span><Check size={15} /> وضع المالك مفتوح — يمكنك الإضافة والتعديل</span>{!authLoading && !isAuthenticated && <button type="button" onClick={startLogin}>تسجيل دخول المالك</button>}<button type="button" onClick={lockOwner}>إغلاق</button></>
             ) : (
-              <><span>الإضافة والتعديل للمالك فقط</span><div><input type="password" inputMode="numeric" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="رمز المالك" aria-label="رمز المالك" /><button type="button" onClick={unlockOwner}>فتح وضع المالك</button></div></>
+              <><span>الإضافة والتعديل للمالك فقط</span><div><input type="password" inputMode="numeric" maxLength={32} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="رمز المالك" aria-label="رمز المالك" /><button type="button" onClick={unlockOwner}>فتح وضع المالك</button></div></>
             )}
           </div>
 
           <label className={`upload-zone ${!isOwner ? "is-locked" : ""}`}>
-            <input type="file" accept="image/*" onChange={handleImage} disabled={!isOwner} />
+            <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleImage} disabled={!isOwner} />
             {imageData ? (
               <img src={imageData} alt="المعاينة المرفوعة" className="studio-upload-preview" />
             ) : (
@@ -333,7 +354,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
           </div>
 
           <div className="studio-action-row">
-            <button type="button" className="studio-primary-button" onClick={saveTemplate}><Check size={17} /> حفظ القالب</button>
+            <button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ القالب"}</button>
             <button type="button" className="studio-outline-button" onClick={copyText}>{copied ? <Check size={16} /> : <Clipboard size={16} />} {copied ? "تم النسخ" : "نسخ النص"}</button>
             <button type="button" className="studio-outline-button" onClick={downloadCard}><Download size={16} /> تحميل التصميم</button>
           </div>
