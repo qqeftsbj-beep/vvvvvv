@@ -15,6 +15,9 @@ describe("site template password setting", () => {
     });
 
     expect(defaultSiteContent.settings.templatePassword).toBe("7705");
+    expect(defaultSiteContent.settings.headingFontFamily).toBe("Noto Kufi Arabic");
+    expect(defaultSiteContent.settings.themeMode).toBe("dark");
+    expect(defaultSiteContent.settings.buttonRadius).toBe(0);
     saveSiteContent({ ...defaultSiteContent, settings: { ...defaultSiteContent.settings, templatePassword: "991122" } });
     expect(loadSiteContent().settings.templatePassword).toBe("991122");
   });

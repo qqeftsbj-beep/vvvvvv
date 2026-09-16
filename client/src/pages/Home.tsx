@@ -4,7 +4,7 @@
   asymmetric editorial composition, tactile portfolio cards, direct and warm copy.
 */
 
-import { CSSProperties, useEffect, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpLeft,
@@ -24,12 +24,15 @@ import {
   Play,
   Sparkles,
   Target,
+  Search,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { EditableButton, SiteContent, loadSiteContent } from "@/lib/siteContent";
+import { useTheme } from "@/contexts/ThemeContext";
 import ChatAssistant from "@/components/ChatAssistant";
+import { trpc } from "@/lib/trpc";
 
 const whatsappChannel =
   "https://whatsapp.com/channel/0029Vb7dajy8vd1Hr860dd2N";
@@ -107,15 +110,15 @@ function scrollToId(id: string) {
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [lightMode, setLightMode] = useState(() => window.localStorage.getItem("abu-kayan-theme") === "light");
+  const { theme, toggleTheme } = useTheme();
+  const lightMode = theme === "light";
   const [brandClicks, setBrandClicks] = useState(0);
   const [content, setContent] = useState<SiteContent>(() => loadSiteContent());
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [, navigate] = useLocation();
-
-  useEffect(() => {
-    document.documentElement.dataset.siteTheme = lightMode ? "light" : "dark";
-    window.localStorage.setItem("abu-kayan-theme", lightMode ? "light" : "dark");
-  }, [lightMode]);
+  const geminiTemplates = trpc.templates.list.useQuery({ tool: "Gemini" }, { staleTime: 30_000 });
+  const chatTemplates = trpc.templates.list.useQuery({ tool: "Chat GBT" }, { staleTime: 30_000 });
 
   useEffect(() => {
     const syncContent = () => setContent(loadSiteContent());
@@ -147,6 +150,25 @@ export default function Home() {
     targets.forEach((target) => observer.observe(target));
     return () => observer.disconnect();
   }, []);
+
+  const searchResults = useMemo(() => {
+    const term = searchTerm.trim().toLocaleLowerCase("ar");
+    if (!term) return [] as Array<{ id: string; title: string; detail: string; kind: string; action: () => void }>;
+    const results: Array<{ id: string; title: string; detail: string; kind: string; action: () => void }> = [];
+    content.services.forEach((service) => {
+      if (`${service.title} ${service.description} ${service.tag}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `service-${service.number}`, title: service.title, detail: service.description, kind: "خدمة", action: () => { setSearchOpen(false); handleNav("services"); } });
+    });
+    content.products.forEach((product) => {
+      if (`${product.title} ${product.description} ${product.price}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `product-${product.id}`, title: product.title, detail: `${product.description} ${product.price}`.trim(), kind: "منتج", action: () => { setSearchOpen(false); handleNav("products"); } });
+    });
+    portfolio.forEach((item) => {
+      if (`${item.title} ${item.text} ${item.eyebrow}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `work-${item.title}`, title: item.title, detail: item.text, kind: "عمل", action: () => { setSearchOpen(false); handleNav("work"); } });
+    });
+    [...(geminiTemplates.data || []), ...(chatTemplates.data || [])].forEach((template) => {
+      if (`${template.text} ${template.imageName} ${template.tool}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `template-${template.id}`, title: template.imageName || "قالب تصميم", detail: template.text, kind: template.tool, action: () => { setSearchOpen(false); navigate(template.tool === "Gemini" ? "/templates/gemini" : "/templates/chat-gbt"); } });
+    });
+    return results.slice(0, 12);
+  }, [chatTemplates.data, content, geminiTemplates.data, navigate, searchTerm]);
 
   const handleCustomButton = (button: EditableButton) => {
     if (button.action === "external" && button.url) {
@@ -180,7 +202,27 @@ export default function Home() {
     });
   };
 
-  const dynamicStyle = { "--dynamic-font": content.settings.fontFamily === "system" ? "system-ui, sans-serif" : `"${content.settings.fontFamily}", Tahoma, sans-serif`, "--dynamic-base": `${content.settings.baseFontSize}px`, "--dynamic-heading": content.settings.headingScale, "--dynamic-bg": content.settings.backgroundColor, "--dynamic-panel": content.settings.panelColor, "--dynamic-accent": content.settings.accentColor, "--dynamic-gold": content.settings.goldColor, ...(content.settings.backgroundImage ? { backgroundImage: `linear-gradient(rgba(8,11,17,.84), rgba(8,11,17,.92)), url(${content.settings.backgroundImage})` } : {}) } as CSSProperties;
+  const dynamicStyle = {
+    "--dynamic-font": content.settings.fontFamily === "system" ? "system-ui, sans-serif" : `"${content.settings.fontFamily}", Tahoma, sans-serif`,
+    "--dynamic-heading-font": content.settings.headingFontFamily === "system" ? "system-ui, sans-serif" : `"${content.settings.headingFontFamily}", Tahoma, sans-serif`,
+    "--dynamic-base": `${content.settings.baseFontSize}px`,
+    "--dynamic-heading": content.settings.headingScale,
+    "--dynamic-weight": content.settings.fontWeight,
+    "--dynamic-line-height": content.settings.lineHeight,
+    "--dynamic-section-gap": `${content.settings.sectionGap}px`,
+    "--dynamic-button-radius": `${content.settings.buttonRadius}px`,
+    "--dynamic-card-radius": `${content.settings.cardRadius}px`,
+    "--dynamic-bg": lightMode ? "#f6f1e8" : content.settings.backgroundColor,
+    "--dynamic-panel": lightMode ? "#fffdf8" : content.settings.panelColor,
+    "--dynamic-text": lightMode ? "#17243a" : content.settings.textColor,
+    "--dynamic-muted": lightMode ? "#596476" : content.settings.mutedColor,
+    "--dynamic-border": lightMode ? "#c8bba8" : content.settings.borderColor,
+    "--dynamic-accent": content.settings.accentColor,
+    "--dynamic-gold": content.settings.goldColor,
+    ...(content.settings.backgroundImage ? { backgroundImage: `linear-gradient(${lightMode ? "rgba(246,241,232,.84), rgba(246,241,232,.92)" : "rgba(8,11,17,.84), rgba(8,11,17,.92)"}), url(${content.settings.backgroundImage})` } : {}),
+  } as CSSProperties;
+  const customButtons = (placement: EditableButton["placement"]) => content.buttons.filter((button) => button.placement === placement).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const customButtonStyle = (button: EditableButton) => ({ backgroundColor: button.backgroundColor || undefined, color: button.textColor || undefined, borderColor: button.borderColor || undefined, borderRadius: `${button.radius ?? content.settings.buttonRadius}px`, fontSize: button.fontSize ? `${button.fontSize}px` : undefined });
   return (
     <main dir="rtl" className={`site-shell ${lightMode ? "site-light" : ""}`} style={dynamicStyle}>
       <div className="paper-grain" aria-hidden="true" />
@@ -219,7 +261,9 @@ export default function Home() {
 
           <div className="header-actions">
             <span className="location-note">صنعاء · عدن · أونلاين</span>
-            <button type="button" className="theme-toggle" onClick={() => setLightMode((current) => !current)} aria-label={lightMode ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"} title={lightMode ? "الوضع الداكن" : "الوضع الفاتح"}>{lightMode ? <Moon size={15} /> : <Sun size={15} />}</button>
+            <button type="button" className="theme-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="البحث في الموقع" title="بحث"><Search size={15} /></button>
+            <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={lightMode ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"} title={lightMode ? "الوضع الداكن" : "الوضع الفاتح"}>{lightMode ? <Moon size={15} /> : <Sun size={15} />}</button>
+            {customButtons("header").map((button) => <button key={button.id} type="button" className="header-admin custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}</button>)}
             <Link href="/owner" className="header-admin"><LockKeyhole size={13} /> لوحة التحكم</Link>
             <button
               type="button"
@@ -240,6 +284,14 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {searchOpen && <section className="site-search" role="search" aria-label="البحث في الموقع">
+        <div className="site-search-inner">
+          <div className="site-search-heading"><span className="eyebrow"><Search size={14} /> بحث عام</span><button type="button" onClick={() => { setSearchOpen(false); setSearchTerm(""); }} aria-label="إغلاق البحث">×</button></div>
+          <input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="ابحث عن خدمة أو نص أو صورة أو قالب..." aria-label="ابحث في الموقع" />
+          {searchTerm.trim() && <div className="site-search-results">{searchResults.length ? searchResults.map((result) => <button type="button" key={result.id} onClick={result.action}><span><small>{result.kind}</small><strong>{result.title}</strong></span><em>{result.detail}</em><ArrowLeft size={15} /></button>) : <p>لا توجد نتائج مطابقة حتى الآن.</p>}</div>}
+        </div>
+      </section>}
 
       <section id="top" className="hero-section">
         <div className="hero-content">
@@ -274,7 +326,7 @@ export default function Home() {
             <Link href="/templates/gemini" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Gemini <ArrowLeft size={15} /></Link>
             <Link href="/templates/chat-gbt" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Chat GBT <ArrowLeft size={15} /></Link>
           </div>
-          {content.buttons.filter((button) => button.placement === "hero").length > 0 && <div className="custom-hero-actions">{content.buttons.filter((button) => button.placement === "hero").map((button) => <button key={button.id} type="button" className="custom-site-button" onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
+          {customButtons("hero").length > 0 && <div className="custom-hero-actions">{customButtons("hero").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
           <div className="hero-proof">
             <div className="proof-avatars" aria-hidden="true">
               <span>أ</span>
@@ -355,7 +407,7 @@ export default function Home() {
                 onClick={() => handlePlaceholder(`خدمة ${service.title}`)}
               >
                 <span className="service-number">{service.number}</span>
-                <span className="service-icon"><Icon size={21} strokeWidth={1.5} /></span>
+                <span className="service-icon">{service.image ? <img src={service.image} alt="" className="service-icon-image" /> : <Icon size={21} strokeWidth={1.5} />}</span>
                 <span className="service-main">
                   <strong>{service.title}</strong>
                   <span>{service.description}</span>
@@ -366,6 +418,7 @@ export default function Home() {
             );
           })}
         </div>
+        {customButtons("services").length > 0 && <div className="custom-section-actions">{customButtons("services").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
       </section>
 
       {content.products.length > 0 && <section id="products" className="section products-section" data-reveal><span className="section-ghost" aria-hidden="true">04</span><div className="section-intro"><span className="section-index">/ 04</span><div><div className="eyebrow">منتجات وخدمات جاهزة</div><h2>أشياء صُممت<br /><em>لتُطلب الآن.</em></h2></div><p>أضف منتجاتك أو باقاتك من لوحة التحكم، واجعلها ظاهرة في واجهة الموقع بشكل واضح.</p></div><div className="product-grid">{content.products.map((product) => <article className="product-card" key={product.id}>{product.image && <img src={product.image} alt="" loading="lazy" />}<div><h3>{product.title}</h3><p>{product.description}</p><strong>{product.price}</strong></div></article>)}</div></section>}
@@ -480,6 +533,7 @@ export default function Home() {
             <p>أرسل لنا نوع الخدمة وفكرتك في رسالة، ونرتب معك الباقي.</p>
           </div>
           <div className="contact-actions">
+            {customButtons("contact").map((button) => <button key={button.id} type="button" className="contact-button custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}
             <a className="contact-button" href={whatsappChannel} target="_blank" rel="noreferrer">
               <MessageCircle size={19} /> تواصل عبر واتساب <ArrowLeft size={17} />
             </a>

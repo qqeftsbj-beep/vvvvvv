@@ -1,6 +1,6 @@
 /*
-  Design reminder — Shared content model:
-  Arabic-first editable content with explicit controls for identity, typography, sections, products, and buttons.
+  Shared editable site model for the owner control room.
+  Every visual value is explicit so the preview can be changed without code edits.
 */
 
 export type EditableService = {
@@ -25,18 +25,34 @@ export type EditableButton = {
   placement: "hero" | "services" | "contact" | "header";
   action: "contact" | "services" | "work" | "gemini" | "chat-gbt" | "external";
   url?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  borderColor?: string;
+  fontSize?: number;
+  radius?: number;
+  order?: number;
 };
 
 export type SiteSettings = {
   fontFamily: "Cairo" | "Tajawal" | "Noto Kufi Arabic" | "system";
+  headingFontFamily: "Cairo" | "Tajawal" | "Noto Kufi Arabic" | "system";
   baseFontSize: number;
   headingScale: number;
+  fontWeight: number;
+  lineHeight: number;
+  sectionGap: number;
+  buttonRadius: number;
+  cardRadius: number;
   backgroundColor: string;
   panelColor: string;
+  textColor: string;
+  mutedColor: string;
+  borderColor: string;
   accentColor: string;
   goldColor: string;
   backgroundImage: string;
   templatePassword: string;
+  themeMode: "dark" | "light";
 };
 
 export type SiteContent = {
@@ -74,14 +90,24 @@ export const defaultSiteContent: SiteContent = {
   buttons: [],
   settings: {
     fontFamily: "Cairo",
+    headingFontFamily: "Noto Kufi Arabic",
     baseFontSize: 16,
     headingScale: 1,
+    fontWeight: 500,
+    lineHeight: 1.7,
+    sectionGap: 96,
+    buttonRadius: 0,
+    cardRadius: 0,
     backgroundColor: "#080b11",
     panelColor: "#111722",
+    textColor: "#f7f3ea",
+    mutedColor: "#9fa9b8",
+    borderColor: "#343b48",
     accentColor: "#ca8467",
     goldColor: "#d5b36a",
     backgroundImage: "",
     templatePassword: "7705",
+    themeMode: "dark",
   },
 };
 

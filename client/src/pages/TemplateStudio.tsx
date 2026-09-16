@@ -1,7 +1,6 @@
 /*
-  Design reminder — Luxury dark studio:
-  Keep the creator practical and premium: matte midnight surfaces, antique-gold actions,
-  clear Arabic RTL hierarchy, restrained motion, and no dependence on a backend for preview work.
+  Shared template library: public browsing, owner-only creation, image/video media,
+  one-click copy/download, and a clean return to the library after saving.
 */
 
 import React, { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -10,10 +9,13 @@ import {
   Check,
   Clipboard,
   Download,
+  FileVideo,
   ImagePlus,
+  Moon,
   Plus,
   RotateCcw,
   Sparkles,
+  Sun,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -23,14 +25,18 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { loadSiteContent } from "@/lib/siteContent";
+import { useTheme } from "@/contexts/ThemeContext";
+
+type MediaType = "image" | "video";
 
 type Template = {
   id: string;
-  text: string;
-  imageData: string;
-  imageName: string;
-  createdAt?: number;
   serverId?: number;
+  text: string;
+  mediaData: string;
+  mediaName: string;
+  mediaType: MediaType;
+  createdAt?: number;
 };
 
 type TemplateStudioProps = {
@@ -52,30 +58,22 @@ export function emptyTemplateDraft(): TemplateDraftState {
 
 const MAX_TEXT_LENGTH = 10000;
 
-function wrapCanvasText(
-  context: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-) {
+function wrapCanvasText(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
   const words = text.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = "";
-
   words.forEach((word) => {
     const testLine = line ? `${line} ${word}` : word;
     if (context.measureText(testLine).width > maxWidth && line) {
       lines.push(line);
       line = word;
-    } else {
-      line = testLine;
-    }
+    } else line = testLine;
   });
-
   if (line) lines.push(line);
   return lines.slice(0, 6);
 }
 
-function readImage(file: File) {
+function readMedia(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -84,28 +82,43 @@ function readImage(file: File) {
   });
 }
 
+function mediaTypeForFile(file: File): MediaType | null {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  return null;
+}
+
 export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioProps) {
   const storageKey = `abu-kayan-templates-${toolName.toLowerCase().replace(/\s/g, "-")}`;
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const templatesQuery = trpc.templates.list.useQuery({ tool: toolName }, { refetchOnWindowFocus: true, staleTime: 0 });
-  const templates = useMemo<Template[]>(() => (templatesQuery.data || []).map((item) => ({ id: String(item.id), serverId: item.id, text: item.text, imageData: item.imageUrl, imageName: item.imageName, createdAt: new Date(item.createdAt).getTime() })), [templatesQuery.data]);
+  const templates = useMemo<Template[]>(() => (templatesQuery.data || []).map((item) => ({
+    id: String(item.id),
+    serverId: item.id,
+    text: item.text,
+    mediaData: item.imageUrl,
+    mediaName: item.imageName,
+    mediaType: item.mediaType === "video" ? "video" : "image",
+    createdAt: new Date(item.createdAt).getTime(),
+  })), [templatesQuery.data]);
   const utils = trpc.useUtils();
   const createTemplateMutation = trpc.templates.create.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
   const updateTemplateMutation = trpc.templates.update.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
   const deleteTemplateMutation = trpc.templates.remove.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
-  const [activeId, setActiveId] = useState<string>("");
+  const [activeId, setActiveId] = useState("");
   const [text, setText] = useState("");
-  const [imageData, setImageData] = useState("");
-  const [imageName, setImageName] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [mediaData, setMediaData] = useState("");
+  const [mediaName, setMediaName] = useState("");
+  const [mediaType, setMediaType] = useState<MediaType>("image");
+  const [copiedId, setCopiedId] = useState("");
   const [isOwner, setIsOwner] = useState(false);
   const [pin, setPin] = useState("");
+  const [editorVisible, setEditorVisible] = useState(false);
   const [templatePassword, setTemplatePassword] = useState(() => loadSiteContent().settings.templatePassword);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setIsOwner(window.sessionStorage.getItem(`${storageKey}-owner`) === "true");
-  }, [storageKey]);
+  useEffect(() => setIsOwner(window.sessionStorage.getItem(`${storageKey}-owner`) === "true"), [storageKey]);
 
   useEffect(() => {
     const syncTemplatePassword = () => setTemplatePassword(loadSiteContent().settings.templatePassword);
@@ -113,270 +126,168 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     return () => window.removeEventListener("abu-kayan-content-updated", syncTemplatePassword);
   }, []);
 
-  const activeTemplate = useMemo(
-    () => templates.find((template) => template.id === activeId),
-    [activeId, templates],
-  );
+  const activeTemplate = useMemo(() => templates.find((template) => template.id === activeId), [activeId, templates]);
+
+  const resetEditor = () => {
+    setActiveId("");
+    setText("");
+    setMediaData("");
+    setMediaName("");
+    setMediaType("image");
+    if (uploadInputRef.current) uploadInputRef.current.value = "";
+  };
 
   const unlockOwner = () => {
     if (pin === templatePassword) {
       setIsOwner(true);
+      setEditorVisible(true);
       window.sessionStorage.setItem(`${storageKey}-owner`, "true");
       setPin("");
-      toast.success("تم فتح وضع المالك لهذه الجلسة.");
+      resetEditor();
+      toast.success("تم فتح محرر إضافة القوالب لهذه الجلسة.");
       return;
     }
-    toast.error("رمز المالك غير صحيح.");
+    toast.error("كلمة مرور القوالب غير صحيحة.");
   };
 
   const lockOwner = () => {
     setIsOwner(false);
+    setEditorVisible(false);
     window.sessionStorage.removeItem(`${storageKey}-owner`);
-    toast("تم إغلاق وضع المالك.");
+    resetEditor();
+    toast("تم إغلاق محرر القوالب.");
   };
 
-  const handleImage = async (event: ChangeEvent<HTMLInputElement>) => {
-    if (!isOwner) {
-      toast("الإضافة متاحة في وضع المالك فقط.");
-      return;
-    }
+  const openCreator = () => {
+    resetEditor();
+    setEditorVisible(true);
+    if (isOwner) toast("المحرر جاهز لإضافة قالب جديد.");
+  };
+
+  const handleMedia = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!isOwner) return toast("الإضافة متاحة بعد إدخال كلمة المرور.");
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("اختر ملف صورة صالحًا.");
-      return;
-    }
+    const nextType = mediaTypeForFile(file);
+    if (!nextType) return toast.error("اختر صورة أو فيديو صالحًا.");
+    if (file.size > 30 * 1024 * 1024) return toast.error("حجم الملف يجب ألا يتجاوز 30 ميجابايت.");
     try {
-      setImageData(await readImage(file));
-      setImageName(file.name);
+      setMediaType(nextType);
+      setMediaData(await readMedia(file));
+      setMediaName(file.name);
     } catch {
-      toast.error("تعذر تحميل الصورة.");
+      toast.error("تعذر تحميل الوسيط.");
     }
   };
 
   const saveTemplate = () => {
     if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
-    if (!isOwner) return toast("افتح وضع المالك لإضافة أو تعديل القوالب.");
+    if (!isOwner) return toast("اضغط إضافة قالب جديد وأدخل كلمة المرور أولًا.");
     if (!isAuthenticated) { startLogin(); return; }
-    if (!imageData || !text.trim()) return toast.error("أضف صورة ونصًا قبل حفظ القالب المشترك.");
+    if (!mediaData || !text.trim()) return toast.error("أضف صورة أو فيديو ونصًا قبل الحفظ.");
+    const payload = { tool: toolName, text: text.trim(), mediaType, mediaData, imageName: mediaName || `abu-kayan-${mediaType}` };
     if (activeTemplate?.serverId) {
       updateTemplateMutation.mutate(
-        { id: activeTemplate.serverId, text: text.trim(), imageName, imageData: imageData.startsWith("data:") ? imageData : undefined },
-        { onSuccess: () => toast.success("تم تحديث القالب المشترك."), onError: () => toast.error("تعذر تحديث القالب المشترك.") },
+        { id: activeTemplate.serverId, text: payload.text, mediaType, mediaData, imageName: payload.imageName },
+        { onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: () => toast.error("تعذر تحديث القالب المشترك.") },
       );
       return;
     }
-    createTemplateMutation.mutate(
-      { tool: toolName, text: text.trim(), imageData, imageName },
-      {
-        onSuccess: () => {
-          startNewTemplate();
-          toast.success("تمت إضافة القالب وسيظهر لجميع الزوار. يمكنك الآن إنشاء قالب جديد.");
-        },
-        onError: () => toast.error("تعذر حفظ القالب المشترك. حاول مرة أخرى."),
-      },
-    );
-  };
-
-  const resetEditor = () => {
-    const empty = emptyTemplateDraft();
-    setActiveId(empty.activeId);
-    setText(empty.text);
-    setImageData(empty.imageData);
-    setImageName(empty.imageName);
-    setCopied(empty.copied);
-    if (uploadInputRef.current) uploadInputRef.current.value = "";
-  };
-
-  const startNewTemplate = () => {
-    if (!isOwner) {
-      toast("إنشاء قالب جديد متاح للمالك فقط.");
-      return;
-    }
-    resetEditor();
+    createTemplateMutation.mutate(payload, {
+      onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تمت إضافة القالب إلى المكتبة المشتركة."); },
+      onError: () => toast.error("تعذر حفظ القالب المشترك. حاول مرة أخرى."),
+    });
   };
 
   const selectTemplate = (template: Template) => {
     setActiveId(template.id);
-    setText(template.text);
-    setImageData(template.imageData);
-    setImageName(template.imageName);
-    setCopied(false);
+    if (isOwner) {
+      setEditorVisible(true);
+      setText(template.text);
+      setMediaData(template.mediaData);
+      setMediaName(template.mediaName);
+      setMediaType(template.mediaType);
+    }
   };
 
   const deleteTemplate = (id: string) => {
-    if (!isOwner) {
-      toast("حذف القوالب متاح للمالك فقط.");
-      return;
-    }
+    if (!isOwner) return toast("الحذف متاح للمالك بعد فتح محرر القوالب.");
     if (!isAuthenticated) { startLogin(); return; }
     const serverId = templates.find((item) => item.id === id)?.serverId;
     if (serverId) deleteTemplateMutation.mutate({ id: serverId });
-    if (id === activeId) startNewTemplate();
+    if (id === activeId) { resetEditor(); setEditorVisible(false); }
     toast("تم حذف القالب من المكتبة المشتركة.");
   };
 
-  const copyText = async () => {
-    if (!text.trim()) {
-      toast.error("أضف نصًا أولًا لنسخه.");
-      return;
-    }
+  const copyValue = async (value: string, id: string) => {
+    if (!value.trim()) return toast.error("لا يوجد نص لنسخه.");
     try {
-      await navigator.clipboard.writeText(text.trim());
-      setCopied(true);
+      await navigator.clipboard.writeText(value.trim());
+      setCopiedId(id);
       toast.success("تم نسخ النص.");
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      toast.error("تعذر النسخ تلقائيًا؛ حدّد النص وانسخه يدويًا.");
-    }
+      window.setTimeout(() => setCopiedId(""), 1600);
+    } catch { toast.error("تعذر النسخ تلقائيًا."); }
   };
 
-  const downloadCard = async () => {
-    if (!imageData && !text.trim()) {
-      toast.error("أضف صورة أو نصًا قبل التحميل.");
+  const downloadMedia = (template: Template) => {
+    if (!template.mediaData) return toast.error("لا يوجد ملف للتحميل.");
+    const link = document.createElement("a");
+    link.download = template.mediaName || `abu-kayan-${template.mediaType}`;
+    link.href = template.mediaData;
+    link.click();
+    toast.success("تم تجهيز الملف للتحميل.");
+  };
+
+  const downloadEditor = async () => {
+    if (mediaType === "video") {
+      downloadMedia({ id: "draft", text, mediaData, mediaName: mediaName || "abu-kayan-video", mediaType });
       return;
     }
-
+    if (!mediaData && !text.trim()) return toast.error("أضف صورة أو نصًا قبل التحميل.");
     const canvas = document.createElement("canvas");
-    canvas.width = 1080;
-    canvas.height = 1350;
+    canvas.width = 1080; canvas.height = 1350;
     const context = canvas.getContext("2d");
     if (!context) return;
-
-    context.fillStyle = "#0b0e14";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#c6a45d";
-    context.fillRect(70, 70, 86, 5);
-    context.font = "600 28px Arial";
-    context.fillText(toolName.toUpperCase(), 70, 125);
-
-    if (imageData) {
-      const image = new Image();
-      image.src = imageData;
-      await new Promise<void>((resolve) => {
-        image.onload = () => resolve();
-        image.onerror = () => resolve();
-      });
-      const frameX = 70;
-      const frameY = 170;
-      const frameW = 940;
-      const frameH = 680;
+    context.fillStyle = "#0b0e14"; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#c6a45d"; context.fillRect(70, 70, 86, 5);
+    context.font = "600 28px Arial"; context.fillText(toolName.toUpperCase(), 70, 125);
+    if (mediaData) {
+      const image = new Image(); image.src = mediaData;
+      await new Promise<void>((resolve) => { image.onload = () => resolve(); image.onerror = () => resolve(); });
+      const frameX = 70; const frameY = 170; const frameW = 940; const frameH = 680;
       const ratio = Math.max(frameW / image.width, frameH / image.height);
-      const drawW = image.width * ratio;
-      const drawH = image.height * ratio;
-      const drawX = frameX + (frameW - drawW) / 2;
-      const drawY = frameY + (frameH - drawH) / 2;
-      context.save();
-      context.beginPath();
-      context.rect(frameX, frameY, frameW, frameH);
-      context.clip();
-      context.drawImage(image, drawX, drawY, drawW, drawH);
-      context.restore();
-      context.strokeStyle = "#c6a45d";
-      context.lineWidth = 2;
-      context.strokeRect(frameX, frameY, frameW, frameH);
+      const drawW = image.width * ratio; const drawH = image.height * ratio;
+      context.save(); context.beginPath(); context.rect(frameX, frameY, frameW, frameH); context.clip(); context.drawImage(image, frameX + (frameW - drawW) / 2, frameY + (frameH - drawH) / 2, drawW, drawH); context.restore();
+      context.strokeStyle = "#c6a45d"; context.lineWidth = 2; context.strokeRect(frameX, frameY, frameW, frameH);
     }
-
-    context.fillStyle = "#f7f3ea";
-    context.textAlign = "right";
-    context.font = "700 52px Arial";
-    const lines = wrapCanvasText(context, text || "قالب أبو كيان الجنيد", 880);
-    lines.forEach((line, index) => context.fillText(line, 1010, 965 + index * 72));
-    context.fillStyle = "#c98567";
-    context.fillRect(70, 1260, 940, 2);
-    context.textAlign = "left";
-    context.fillStyle = "#9fa9b8";
-    context.font = "400 22px Arial";
-    context.fillText(`ABU KAYAN · ${toolName}`, 70, 1305);
-
-    const link = document.createElement("a");
-    link.download = `abu-kayan-${toolName.toLowerCase().replace(/\s/g, "-")}-${Date.now()}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-    toast.success("تم تجهيز التصميم للتحميل.");
+    context.fillStyle = "#f7f3ea"; context.textAlign = "right"; context.font = "700 52px Arial";
+    wrapCanvasText(context, text || "قالب أبو كيان الجنيد", 880).forEach((line, index) => context.fillText(line, 1010, 965 + index * 72));
+    context.fillStyle = "#c98567"; context.fillRect(70, 1260, 940, 2); context.textAlign = "left"; context.fillStyle = "#9fa9b8"; context.font = "400 22px Arial"; context.fillText(`ABU KAYAN · ${toolName}`, 70, 1305);
+    const link = document.createElement("a"); link.download = `abu-kayan-${toolName.toLowerCase().replace(/\s/g, "-")}-${Date.now()}.png`; link.href = canvas.toDataURL("image/png"); link.click(); toast.success("تم تجهيز التصميم للتحميل.");
   };
 
-  return (
-    <main dir="rtl" className="studio-page">
-      <div className="studio-orbit studio-orbit-one" aria-hidden="true" />
-      <div className="studio-orbit studio-orbit-two" aria-hidden="true" />
-      <header className="studio-header">
-        <Link href="/" className="studio-back"><ArrowRight size={17} /> العودة للموقع</Link>
-        <div className="studio-brand"><Sparkles size={17} /> أبو كيان الجنيد</div>
-      </header>
+  const renderMedia = (source: string, type: MediaType, className = "") => type === "video" ? <video src={source} className={className} controls muted playsInline preload="metadata" /> : <img src={source} alt="" className={className} />;
 
-      <section className="studio-hero">
-        <div className="studio-kicker"><span /> مساحة {toolLabel}</div>
-        <h1>قالبك جاهز<br /><em>للفكرة التالية.</em></h1>
-        <p>أضف الصورة، اكتب النص أسفلها، ثم انسخ النص أو حمّل التصميم عندما يكتمل.</p>
-        <div className="studio-steps">
-          <span><b>01</b> صورة</span><i />
-          <span><b>02</b> نص</span><i />
-          <span><b>03</b> تحميل</span>
+  return <main dir="rtl" className="studio-page">
+    <div className="studio-orbit studio-orbit-one" aria-hidden="true" /><div className="studio-orbit studio-orbit-two" aria-hidden="true" />
+    <header className="studio-header"><Link href="/" className="studio-back"><ArrowRight size={17} /> العودة للموقع</Link><div className="studio-header-actions"><button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><div className="studio-brand"><Sparkles size={17} /> أبو كيان الجنيد</div></div></header>
+    <section className="studio-hero"><div className="studio-kicker"><span /> مساحة {toolLabel}</div><h1>مكتبة تصاميم<br /><em>تتوسع معك.</em></h1><p>تصفح القوالب المنشورة، وانسخ النص أو حمّل الملف من البطاقة. لإضافة قالب جديد استخدم الزر العلوي وأدخل كلمة المرور.</p><div className="studio-steps"><span><b>01</b> إضافة</span><i /><span><b>02</b> صورة أو فيديو</span><i /><span><b>03</b> نشر</span></div></section>
+    <section className={`studio-layout ${editorVisible ? "has-editor" : "library-only"}`}>
+      {editorVisible && <div className="studio-editor-panel">
+        <div className="studio-panel-top"><div><span className="studio-label">المحرر الخاص بالمالك</span><h2>{activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"}</h2></div><button type="button" className="studio-ghost-button" onClick={openCreator}><Plus size={16} /> قالب جديد</button></div>
+        <div className={`owner-control ${isOwner ? "is-unlocked" : ""}`}>
+          {isOwner ? <><span><Check size={15} /> وضع المالك مفتوح</span>{!authLoading && !isAuthenticated && <button type="button" onClick={startLogin}>تسجيل دخول المالك</button>}<button type="button" onClick={lockOwner}>إغلاق المحرر</button></> : <><span>أدخل كلمة المرور لفتح الإضافة</span><div><input type="password" inputMode="numeric" maxLength={32} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="كلمة مرور القوالب" aria-label="كلمة مرور القوالب" /><button type="button" onClick={unlockOwner}>فتح الإضافة</button></div></>}
         </div>
-      </section>
-
-      <section className="studio-layout">
-        <div className="studio-editor-panel">
-          <div className="studio-panel-top">
-            <div><span className="studio-label">القالب الحالي</span><h2>{activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"}</h2></div>
-            <button type="button" className="studio-ghost-button" onClick={startNewTemplate}><Plus size={16} /> قالب جديد</button>
-          </div>
-
-          <div className={`owner-control ${isOwner ? "is-unlocked" : ""}`}>
-            {isOwner ? (
-              <><span><Check size={15} /> وضع المالك مفتوح — يمكنك الإضافة والتعديل</span>{!authLoading && !isAuthenticated && <button type="button" onClick={startLogin}>تسجيل دخول المالك</button>}<button type="button" onClick={lockOwner}>إغلاق</button></>
-            ) : (
-              <><span>الإضافة والتعديل للمالك فقط</span><div><input type="password" inputMode="numeric" maxLength={32} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="رمز المالك" aria-label="رمز المالك" /><button type="button" onClick={unlockOwner}>فتح وضع المالك</button></div></>
-            )}
-          </div>
-
-          <label className={`upload-zone ${!isOwner ? "is-locked" : ""}`}>
-            <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleImage} disabled={!isOwner} />
-            {imageData ? (
-              <img src={imageData} alt="المعاينة المرفوعة" className="studio-upload-preview" />
-            ) : (
-              <span className="upload-empty"><ImagePlus size={28} /><strong>{isOwner ? "أفلت الصورة هنا" : "الصورة محفوظة للمالك"}</strong><small>{isOwner ? "أو اضغط لاختيار صورة من جهازك" : "افتح وضع المالك لإضافة صورة"}</small><span className="upload-chip"><Upload size={14} /> {isOwner ? "رفع صورة" : "مقفل"}</span></span>
-            )}
-          </label>
-          {imageName && <div className="file-name">{imageName}</div>}
-
-          <label className="studio-field">
-            <span>النص أسفل الصورة</span>
-            <textarea value={text} maxLength={MAX_TEXT_LENGTH} readOnly={!isOwner} onChange={(event) => setText(event.target.value)} placeholder="اكتب التهنئة أو النص الذي تريد الاحتفاظ به..." />
-            <small>{text.length.toLocaleString("ar-EG")} / 10,000</small>
-          </label>
-
-          <div className="template-card-preview">
-            <div className="template-card-image">{imageData ? <img src={imageData} alt="" /> : <ImagePlus size={28} />}</div>
-            <p>{text || "سيظهر النص هنا تحت الصورة"}</p>
-            <span>أبو كيان الجنيد · {toolName}</span>
-          </div>
-
-          <div className="studio-action-row">
-            <button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ القالب"}</button>
-            <button type="button" className="studio-outline-button" onClick={copyText}>{copied ? <Check size={16} /> : <Clipboard size={16} />} {copied ? "تم النسخ" : "نسخ النص"}</button>
-            <button type="button" className="studio-outline-button" onClick={downloadCard}><Download size={16} /> تحميل التصميم</button>
-          </div>
-          <p className="studio-note"><RotateCcw size={14} /> القوالب المشتركة تظهر لجميع الزوار، والإضافة والتعديل متاحان للمالك بعد تسجيل الدخول.</p>
-        </div>
-
-        <aside className="studio-library">
-          <div className="studio-library-head"><div><span className="studio-label">المكتبة</span><h2>القوالب المشتركة <b>{templates.length}</b></h2></div></div>
-          {templates.length === 0 ? (
-            <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة بعد.<br />سيظهر أحدث قالب هنا أولًا.</p></div>
-          ) : (
-            <div className="library-list">
-              {templates.map((template, index) => (
-                <div className={`library-item ${template.id === activeId ? "is-active" : ""}`} key={template.id}>
-                  <button type="button" className="library-select" onClick={() => selectTemplate(template)}><span className="library-thumb">{template.imageData ? <img src={template.imageData} alt="" /> : <Sparkles size={16} />}</span><span><b>قالب {String(index + 1).padStart(2, "0")}</b><small>{template.text || "بدون نص"}</small></span></button>
-                  <button type="button" className="library-delete" onClick={() => deleteTemplate(template.id)} aria-label="حذف القالب"><Trash2 size={14} /></button>
-                </div>
-              ))}
-            </div>
-          )}
-        </aside>
-      </section>
-    </main>
-  );
+        {isOwner && <>
+          <label className="upload-zone"><input ref={uploadInputRef} type="file" accept="image/*,video/*" onChange={handleMedia} /><span className="upload-empty"><ImagePlus size={28} /><strong>{mediaData ? "تغيير الصورة أو الفيديو" : "ارفع صورة أو فيديو"}</strong><small>الصورة أو الفيديو سيظهران مع النص في بطاقة واحدة.</small><span className="upload-chip"><Upload size={14} /> اختيار ملف</span></span></label>
+          {mediaName && <div className="file-name">{mediaName} · {mediaType === "video" ? "فيديو" : "صورة"}</div>}
+          <label className="studio-field"><span>النص أسفل الوسيط</span><textarea value={text} maxLength={MAX_TEXT_LENGTH} onChange={(event) => setText(event.target.value)} placeholder="اكتب التهنئة أو النص الذي تريد الاحتفاظ به..." /><small>{text.length.toLocaleString("ar-EG")} / 10,000</small></label>
+          <div className="template-card-preview"><div className="template-card-image">{mediaData ? renderMedia(mediaData, mediaType) : <ImagePlus size={28} />}</div><p>{text || "سيظهر النص هنا تحت الصورة أو الفيديو"}</p><span>أبو كيان الجنيد · {toolName}</span></div>
+          <div className="studio-action-row"><button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ ونشر القالب"}</button><button type="button" className="studio-outline-button" onClick={() => copyValue(text, "draft")}>{copiedId === "draft" ? <Check size={16} /> : <Clipboard size={16} />} {copiedId === "draft" ? "تم النسخ" : "نسخ النص"}</button><button type="button" className="studio-outline-button" onClick={downloadEditor}><Download size={16} /> تحميل</button></div>
+        </>}
+      </div>}
+      <aside className="studio-library"><div className="studio-library-head"><div><span className="studio-label">المكتبة السابقة</span><h2>القوالب المشتركة <b>{templates.length}</b></h2></div><button type="button" className="studio-primary-button studio-new-template" onClick={openCreator}><Plus size={16} /> إضافة قالب جديد</button></div>{templates.length === 0 ? <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة بعد.<br />اضغط «إضافة قالب جديد» للبدء.</p></div> : <div className="library-list">{templates.map((template, index) => <article className={`library-item ${template.id === activeId ? "is-active" : ""}`} key={template.id}><button type="button" className="library-select" onClick={() => selectTemplate(template)}><span className="library-thumb">{template.mediaData ? renderMedia(template.mediaData, template.mediaType) : <Sparkles size={16} />}</span><span><b>قالب {String(index + 1).padStart(2, "0")}</b><small>{template.mediaType === "video" ? <><FileVideo size={11} /> فيديو · </> : "صورة · "}{template.text || "بدون نص"}</small></span></button><div className="library-item-actions"><button type="button" onClick={() => copyValue(template.text, template.id)} aria-label="نسخ نص القالب">{copiedId === template.id ? <Check size={13} /> : <Clipboard size={13} />}</button><button type="button" onClick={() => downloadMedia(template)} aria-label="تحميل القالب"><Download size={13} /></button>{isOwner && <button type="button" onClick={() => deleteTemplate(template.id)} aria-label="حذف القالب"><Trash2 size={13} /></button>}</div></article>)}</div>}</aside>
+    </section>
+    <p className="studio-note"><RotateCcw size={14} /> بعد الحفظ يعود القالب مباشرة إلى المكتبة السابقة، ويستطيع الزائر نسخ النص أو تحميل الوسيط من البطاقة.</p>
+  </main>;
 }

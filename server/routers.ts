@@ -10,14 +10,16 @@ const toolSchema = z.enum(["Gemini", "Chat GBT"]);
 const templateInput = z.object({
   tool: toolSchema,
   text: z.string().max(10000),
-  imageData: z.string().min(1),
-  imageName: z.string().max(255).default("design-image"),
-});
+  mediaType: z.enum(["image", "video"]).default("image"),
+  mediaData: z.string().min(1).optional(),
+  imageData: z.string().min(1).optional(),
+  imageName: z.string().max(255).default("design-media"),
+}).refine((input) => Boolean(input.mediaData || input.imageData), { message: "Media data is required" });
 
 function decodeDataUrl(value: string) {
   const match = value.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) throw new Error("Invalid image data");
-  return { contentType: match[1] || "image/png", buffer: Buffer.from(match[2] || "", "base64") };
+  if (!match) throw new Error("Invalid media data");
+  return { contentType: match[1] || "application/octet-stream", buffer: Buffer.from(match[2] || "", "base64") };
 }
 
 export const appRouter = router({
@@ -33,16 +35,17 @@ export const appRouter = router({
   templates: router({
     list: publicProcedure.input(z.object({ tool: toolSchema })).query(({ input }) => listSharedTemplates(input.tool)),
     create: adminProcedure.input(templateInput).mutation(async ({ input, ctx }) => {
-      const decoded = decodeDataUrl(input.imageData);
+      const decoded = decodeDataUrl(input.mediaData || input.imageData || "");
       const uploaded = await storagePut(`shared-templates/${input.tool.toLowerCase().replace(/\s+/g, "-")}/${input.imageName}`, decoded.buffer, decoded.contentType);
-      return createSharedTemplate({ tool: input.tool, text: input.text, imageUrl: uploaded.url, imageKey: uploaded.key, imageName: input.imageName, createdByOpenId: ctx.user.openId });
+      return createSharedTemplate({ tool: input.tool, text: input.text, imageUrl: uploaded.url, imageKey: uploaded.key, imageName: input.imageName, mediaType: input.mediaType, createdByOpenId: ctx.user.openId });
     }),
-    update: adminProcedure.input(z.object({ id: z.number(), text: z.string().max(10000).optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional() })).mutation(async ({ input, ctx }) => {
+    update: adminProcedure.input(z.object({ id: z.number(), text: z.string().max(10000).optional(), mediaType: z.enum(["image", "video"]).optional(), mediaData: z.string().optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional() })).mutation(async ({ input, ctx }) => {
       const update: Record<string, unknown> = {};
       if (input.text !== undefined) update.text = input.text;
       if (input.imageName !== undefined) update.imageName = input.imageName;
-      if (input.imageData) {
-        const decoded = decodeDataUrl(input.imageData);
+      if (input.mediaType !== undefined) update.mediaType = input.mediaType;
+      if (input.mediaData || input.imageData) {
+        const decoded = decodeDataUrl(input.mediaData || input.imageData || "");
         const uploaded = await storagePut(`shared-templates/updates/${input.imageName || "design-image"}`, decoded.buffer, decoded.contentType);
         update.imageUrl = uploaded.url;
         update.imageKey = uploaded.key;

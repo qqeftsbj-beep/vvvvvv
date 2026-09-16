@@ -20,6 +20,7 @@ export const sharedTemplates = mysqlTable("shared_templates", {
   imageUrl: text("imageUrl").notNull(),
   imageKey: text("imageKey").notNull(),
   imageName: varchar("imageName", { length: 255 }).notNull(),
+  mediaType: varchar("mediaType", { length: 16 }).default("image").notNull(),
   createdByOpenId: varchar("createdByOpenId", { length: 64 }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

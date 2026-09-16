@@ -1,0 +1,1 @@
+ALTER TABLE `shared_templates` ADD `mediaType` varchar(16) DEFAULT 'image' NOT NULL;

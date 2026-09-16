@@ -18,6 +18,7 @@ vi.mock("@/lib/trpc", () => ({
 }));
 
 vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ isAuthenticated: true, loading: false }) }));
+vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "dark", toggleTheme: vi.fn(), switchable: true }) }));
 vi.mock("@/const", () => ({ startLogin: vi.fn() }));
 vi.mock("sonner", () => {
   const toast = Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() });
@@ -34,31 +35,34 @@ describe("TemplateStudio interactive flow", () => {
     window.sessionStorage.clear();
   });
 
-  it("clears the editor after saving and accepts a second template", async () => {
+  it("opens the protected creator, clears it after saving, and accepts a second template", async () => {
     const { container } = render(<TemplateStudio toolName="Gemini" toolLabel="Gemini" />);
 
-    fireEvent.change(screen.getByLabelText("رمز المالك"), { target: { value: "7705" } });
-    fireEvent.click(screen.getByRole("button", { name: "فتح وضع المالك" }));
+    fireEvent.click(screen.getByRole("button", { name: "إضافة قالب جديد" }));
+    fireEvent.change(screen.getByLabelText("كلمة مرور القوالب"), { target: { value: "7705" } });
+    fireEvent.click(screen.getByRole("button", { name: "فتح الإضافة" }));
 
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).toBeTruthy();
     const textArea = screen.getByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...");
     fireEvent.change(input, { target: { files: [new File(["first"], "first.png", { type: "image/png" })] } });
-    await waitFor(() => expect(screen.getByText("first.png")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/first\.png/)).toBeTruthy());
     fireEvent.change(textArea, { target: { value: "القالب الأول" } });
     await waitFor(() => expect((textArea as HTMLTextAreaElement).value).toBe("القالب الأول"));
 
-    fireEvent.click(screen.getByRole("button", { name: "حفظ القالب" }));
-    await waitFor(() => expect((textArea as HTMLTextAreaElement).value).toBe(""));
-    expect(screen.getByRole("heading", { name: "قالب جديد" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "حفظ ونشر القالب" }));
+    await waitFor(() => expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull());
+    expect(screen.getByRole("button", { name: "إضافة قالب جديد" })).toBeTruthy();
     expect(input.value).toBe("");
-    expect(screen.getByText("سيظهر النص هنا تحت الصورة")).toBeTruthy();
 
-    fireEvent.change(input, { target: { files: [new File(["second"], "second.png", { type: "image/png" })] } });
-    await waitFor(() => expect(screen.getByText("second.png")).toBeTruthy());
-    fireEvent.change(textArea, { target: { value: "القالب الثاني" } });
-    fireEvent.click(screen.getByRole("button", { name: "حفظ القالب" }));
-    await waitFor(() => expect((textArea as HTMLTextAreaElement).value).toBe(""));
+    fireEvent.click(screen.getByRole("button", { name: "إضافة قالب جديد" }));
+    const secondInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const secondTextArea = screen.getByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...");
+    fireEvent.change(secondInput, { target: { files: [new File(["second"], "second.png", { type: "image/png" })] } });
+    await waitFor(() => expect(screen.getByText(/second\.png/)).toBeTruthy());
+    fireEvent.change(secondTextArea, { target: { value: "القالب الثاني" } });
+    fireEvent.click(screen.getByRole("button", { name: "حفظ ونشر القالب" }));
+    await waitFor(() => expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull());
     expect(mutate).toHaveBeenCalledTimes(2);
   });
 });
