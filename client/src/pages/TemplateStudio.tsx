@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Sparkles,
   Sun,
+  Share2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -99,9 +100,9 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     text: item.text,
     mediaData: item.imageUrl,
     mediaName: item.imageName,
-    mediaType: item.mediaType === "video" ? "video" : "image",
+    mediaType: (item.mediaType === "video" ? "video" : "image") as MediaType,
     createdAt: new Date(item.createdAt).getTime(),
-  })), [templatesQuery.data]);
+  })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [templatesQuery.data]);
   const utils = trpc.useUtils();
   const createTemplateMutation = trpc.templates.create.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
   const updateTemplateMutation = trpc.templates.update.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
@@ -112,6 +113,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const [mediaName, setMediaName] = useState("");
   const [mediaType, setMediaType] = useState<MediaType>("image");
   const [copiedId, setCopiedId] = useState("");
+  const [expandedTextIds, setExpandedTextIds] = useState<string[]>([]);
   const [isOwner, setIsOwner] = useState(false);
   const [pin, setPin] = useState("");
   const [editorVisible, setEditorVisible] = useState(false);
@@ -127,6 +129,14 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   }, []);
 
   const activeTemplate = useMemo(() => templates.find((template) => template.id === activeId), [activeId, templates]);
+
+  useEffect(() => {
+    const sharedId = new URLSearchParams(window.location.search).get("template");
+    if (!sharedId || !templates.some((template) => template.id === sharedId)) return;
+    setActiveId(sharedId);
+    const timer = window.setTimeout(() => document.getElementById(`template-${sharedId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
+    return () => window.clearTimeout(timer);
+  }, [templates]);
 
   const resetEditor = () => {
     setActiveId("");
@@ -238,6 +248,27 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     toast.success("تم تجهيز الملف للتحميل.");
   };
 
+  const templateUrl = (template: Template) => `${window.location.origin}${window.location.pathname}?template=${encodeURIComponent(template.id)}`;
+
+  const shareTemplate = async (template: Template) => {
+    const url = templateUrl(template);
+    try {
+      const canShare = typeof navigator !== "undefined" && typeof (navigator as Navigator & { share?: unknown }).share === "function";
+      if (canShare) {
+        await (navigator as Navigator & { share: (data: ShareData) => Promise<void> }).share({ title: `قالب أبو كيان الجنيد · ${toolName}`, text: template.text.slice(0, 120), url });
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+      setCopiedId(`share-${template.id}`);
+      toast.success(canShare ? "تم فتح خيارات المشاركة." : "تم نسخ رابط القالب.");
+      window.setTimeout(() => setCopiedId(""), 1600);
+    } catch {
+      try { await navigator.clipboard.writeText(url); toast.success("تم نسخ رابط القالب."); } catch { toast.error("تعذرت مشاركة الرابط."); }
+    }
+  };
+
+  const toggleText = (id: string) => setExpandedTextIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+
   const downloadEditor = async () => {
     if (mediaType === "video") {
       downloadMedia({ id: "draft", text, mediaData, mediaName: mediaName || "abu-kayan-video", mediaType });
@@ -286,7 +317,30 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
           <div className="studio-action-row"><button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ ونشر القالب"}</button><button type="button" className="studio-outline-button" onClick={() => copyValue(text, "draft")}>{copiedId === "draft" ? <Check size={16} /> : <Clipboard size={16} />} {copiedId === "draft" ? "تم النسخ" : "نسخ النص"}</button><button type="button" className="studio-outline-button" onClick={downloadEditor}><Download size={16} /> تحميل</button></div>
         </>}
       </div>}
-      <aside className="studio-library"><div className="studio-library-head"><div><span className="studio-label">المكتبة السابقة</span><h2>القوالب المشتركة <b>{templates.length}</b></h2></div><button type="button" className="studio-primary-button studio-new-template" onClick={openCreator}><Plus size={16} /> إضافة قالب جديد</button></div>{templates.length === 0 ? <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة بعد.<br />اضغط «إضافة قالب جديد» للبدء.</p></div> : <div className="library-list">{templates.map((template, index) => <article className={`library-item ${template.id === activeId ? "is-active" : ""}`} key={template.id}><button type="button" className="library-select" onClick={() => selectTemplate(template)}><span className="library-thumb">{template.mediaData ? renderMedia(template.mediaData, template.mediaType) : <Sparkles size={16} />}</span><span><b>قالب {String(index + 1).padStart(2, "0")}</b><small>{template.mediaType === "video" ? <><FileVideo size={11} /> فيديو · </> : "صورة · "}{template.text || "بدون نص"}</small></span></button><div className="library-item-actions"><button type="button" onClick={() => copyValue(template.text, template.id)} aria-label="نسخ نص القالب">{copiedId === template.id ? <Check size={13} /> : <Clipboard size={13} />}</button><button type="button" onClick={() => downloadMedia(template)} aria-label="تحميل القالب"><Download size={13} /></button>{isOwner && <button type="button" onClick={() => deleteTemplate(template.id)} aria-label="حذف القالب"><Trash2 size={13} /></button>}</div></article>)}</div>}</aside>
+      <aside className="studio-library">
+        <div className="studio-library-head">
+          <div><span className="studio-label">المكتبة السابقة · الأحدث أولًا</span><h2>القوالب المشتركة <b>{templates.length}</b></h2></div>
+          <button type="button" className="studio-primary-button studio-new-template" onClick={openCreator}><Plus size={16} /> إضافة قالب جديد</button>
+        </div>
+        {templates.length === 0 ? <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة بعد.<br />اضغط «إضافة قالب جديد» للبدء.</p></div> : <div className="library-list">
+          {templates.map((template, index) => {
+            const isExpanded = expandedTextIds.includes(template.id);
+            const isLong = template.text.length > 240;
+            const visibleText = isExpanded || !isLong ? template.text : `${template.text.slice(0, 240).trimEnd()}…`;
+            return <article id={`template-${template.id}`} data-template-id={template.id} className={`library-item ${template.id === activeId ? "is-active" : ""}`} key={template.id}>
+              <button type="button" className="library-media-button" onClick={() => selectTemplate(template)} aria-label={`فتح قالب ${index + 1}`}>
+                <span className="library-item-media">{template.mediaData ? renderMedia(template.mediaData, template.mediaType) : <Sparkles size={28} />}</span>
+              </button>
+              <div className="library-item-body">
+                <div className="library-item-heading"><span><b>قالب {String(index + 1).padStart(2, "0")}</b><small>{template.mediaType === "video" ? <><FileVideo size={11} /> فيديو</> : "صورة"}</small></span><time>{template.createdAt ? new Date(template.createdAt).toLocaleDateString("ar-YE") : ""}</time></div>
+                <div className="whatsapp-message"><p>{visibleText || "بدون نص"}</p>{isLong && <button type="button" className="read-more-button" onClick={() => toggleText(template.id)}>{isExpanded ? "عرض أقل" : "قراءة المزيد"}</button>}</div>
+                <div className="library-item-actions"><button type="button" onClick={() => copyValue(template.text, template.id)} aria-label="نسخ نص القالب">{copiedId === template.id ? <Check size={13} /> : <Clipboard size={13} />}<span>نسخ النص</span></button><button type="button" onClick={() => downloadMedia(template)} aria-label="تحميل القالب"><Download size={13} /><span>تحميل</span></button><button type="button" onClick={() => shareTemplate(template)} aria-label="مشاركة رابط القالب">{copiedId === `share-${template.id}` ? <Check size={13} /> : <Share2 size={13} />}<span>مشاركة</span></button>{isOwner && <button type="button" onClick={() => deleteTemplate(template.id)} aria-label="حذف القالب"><Trash2 size={13} /><span>حذف</span></button>}</div>
+                <div className="template-direct-link"><span>{templateUrl(template)}</span><button type="button" onClick={() => shareTemplate(template)}>نسخ الرابط</button></div>
+              </div>
+            </article>;
+          })}
+        </div>}
+      </aside>
     </section>
     <p className="studio-note"><RotateCcw size={14} /> بعد الحفظ يعود القالب مباشرة إلى المكتبة السابقة، ويستطيع الزائر نسخ النص أو تحميل الوسيط من البطاقة.</p>
   </main>;

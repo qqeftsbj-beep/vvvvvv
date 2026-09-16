@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React, { type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mutate = vi.fn((_input: unknown, callbacks?: { onSuccess?: () => void }) => callbacks?.onSuccess?.());
+const longTemplateText = "هذه رسالة طويلة لاختبار عرض القالب بطريقة تشبه رسالة الواتساب مع إمكانية القراءة الموسعة والنسخ والمشاركة المباشرة عبر الرابط.".repeat(4);
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     templates: {
-      list: { useQuery: () => ({ data: [], isLoading: false }) },
+      list: { useQuery: () => ({ data: [{ id: 8, text: longTemplateText, imageUrl: "data:image/png;base64,AAAA", imageName: "shared.png", mediaType: "image", createdAt: "2026-09-16T12:00:00.000Z" }], isLoading: false }) },
       create: { useMutation: () => ({ mutate, isPending: false }) },
       update: { useMutation: () => ({ mutate, isPending: false }) },
       remove: { useMutation: () => ({ mutate, isPending: false }) },
@@ -29,10 +30,14 @@ vi.mock("wouter", () => ({ Link: ({ children, ...props }: { children: ReactNode;
 import TemplateStudio from "./TemplateStudio";
 
 describe("TemplateStudio interactive flow", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     mutate.mockClear();
     window.localStorage.clear();
     window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/templates/gemini");
+    HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   it("opens the protected creator, clears it after saving, and accepts a second template", async () => {
@@ -64,5 +69,17 @@ describe("TemplateStudio interactive flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "حفظ ونشر القالب" }));
     await waitFor(() => expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull());
     expect(mutate).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders a wide card with WhatsApp-like text, read more, and a direct share link", async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    render(<TemplateStudio toolName="Gemini" toolLabel="Gemini" />);
+
+    expect(screen.getByText("قراءة المزيد")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "قراءة المزيد" }));
+    expect(screen.getByText(longTemplateText)).toBeTruthy();
+    expect(screen.getByText(/template=8/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "مشاركة رابط القالب" }));
+    await waitFor(() => expect(screen.getByText(/template=8/)).toBeTruthy());
   });
 });
