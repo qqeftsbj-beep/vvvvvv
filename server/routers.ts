@@ -2,7 +2,7 @@ import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, ownerProcedure, publicProcedure, router } from "./_core/trpc";
 import { cleanupDeletedSharedTemplates, createSharedTemplate, deleteSharedTemplate, getTemplateRetentionDays, listDeletedSharedTemplates, listSharedTemplates, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateSharedTemplate } from "./db";
 import { storagePut } from "./storage";
 
@@ -34,12 +34,12 @@ export const appRouter = router({
   }),
   templates: router({
     list: publicProcedure.input(z.object({ tool: toolSchema })).query(({ input }) => listSharedTemplates(input.tool)),
-    create: adminProcedure.input(templateInput).mutation(async ({ input, ctx }) => {
+    create: ownerProcedure.input(templateInput).mutation(async ({ input, ctx }) => {
       const decoded = decodeDataUrl(input.mediaData || input.imageData || "");
       const uploaded = await storagePut(`shared-templates/${input.tool.toLowerCase().replace(/\s+/g, "-")}/${input.imageName}`, decoded.buffer, decoded.contentType);
       return createSharedTemplate({ tool: input.tool, text: input.text, imageUrl: uploaded.url, imageKey: uploaded.key, imageName: input.imageName, mediaType: input.mediaType, createdByOpenId: ctx.user.openId });
     }),
-    update: adminProcedure.input(z.object({ id: z.number(), text: z.string().max(10000).optional(), mediaType: z.enum(["image", "video"]).optional(), mediaData: z.string().optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional() })).mutation(async ({ input, ctx }) => {
+    update: ownerProcedure.input(z.object({ id: z.number(), text: z.string().max(10000).optional(), mediaType: z.enum(["image", "video"]).optional(), mediaData: z.string().optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional() })).mutation(async ({ input, ctx }) => {
       const update: Record<string, unknown> = {};
       if (input.text !== undefined) update.text = input.text;
       if (input.imageName !== undefined) update.imageName = input.imageName;
@@ -53,13 +53,13 @@ export const appRouter = router({
       update.createdByOpenId = ctx.user.openId;
       return updateSharedTemplate(input.id, update);
     }),
-    remove: adminProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteSharedTemplate(input.id)),
-    recycleBin: adminProcedure.query(() => listDeletedSharedTemplates()),
-    restore: adminProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => restoreSharedTemplate(input.id)),
-    purge: adminProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => purgeSharedTemplate(input.id)),
-    cleanup: adminProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365).default(30) })).mutation(({ input }) => cleanupDeletedSharedTemplates(input.retentionDays)),
-    retentionDays: adminProcedure.query(() => getTemplateRetentionDays()),
-    setRetentionDays: adminProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365) })).mutation(({ input }) => setTemplateRetentionDays(input.retentionDays)),
+    remove: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteSharedTemplate(input.id)),
+    recycleBin: ownerProcedure.query(() => listDeletedSharedTemplates()),
+    restore: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => restoreSharedTemplate(input.id)),
+    purge: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => purgeSharedTemplate(input.id)),
+    cleanup: ownerProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365).default(30) })).mutation(({ input }) => cleanupDeletedSharedTemplates(input.retentionDays)),
+    retentionDays: ownerProcedure.query(() => getTemplateRetentionDays()),
+    setRetentionDays: ownerProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365) })).mutation(({ input }) => setTemplateRetentionDays(input.retentionDays)),
   }),
 });
 

@@ -202,13 +202,13 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       const newMedia = mediaData.startsWith("data:") ? { mediaData } : {};
       updateTemplateMutation.mutate(
         { id: activeTemplate.serverId, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName },
-        { onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: () => toast.error("تعذر تحديث القالب المشترك.") },
+        { onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: (error) => toast.error(error.message || "تعذر تحديث القالب المشترك.") },
       );
       return;
     }
     createTemplateMutation.mutate(payload, {
       onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تمت إضافة القالب إلى المكتبة المشتركة."); },
-      onError: () => toast.error("تعذر حفظ القالب المشترك. حاول مرة أخرى."),
+      onError: (error) => toast.error(error.message || "تعذر حفظ القالب المشترك. حاول مرة أخرى."),
     });
   };
 
