@@ -9,7 +9,7 @@ const longTemplateText = "هذه رسالة طويلة لاختبار عرض ا�
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     templates: {
-      list: { useQuery: () => ({ data: [{ id: 8, text: longTemplateText, imageUrl: "data:image/png;base64,AAAA", imageName: "shared.png", mediaType: "image", createdAt: "2026-09-16T12:00:00.000Z" }], isLoading: false }) },
+      list: { useQuery: () => ({ data: [{ id: 8, text: longTemplateText, imageUrl: "/manus-storage/shared.png", imageName: "shared.png", mediaType: "image", createdAt: "2026-09-16T12:00:00.000Z" }], isLoading: false }) },
       create: { useMutation: () => ({ mutate, isPending: false }) },
       update: { useMutation: () => ({ mutate, isPending: false }) },
       remove: { useMutation: () => ({ mutate, isPending: false }) },
@@ -81,5 +81,17 @@ describe("TemplateStudio interactive flow", () => {
     expect(screen.getByText(/template=8/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "مشاركة رابط القالب" }));
     await waitFor(() => expect(screen.getByText(/template=8/)).toBeTruthy());
+  });
+
+  it("opens an existing template in the modal and saves without re-uploading its storage URL", async () => {
+    window.sessionStorage.setItem("abu-kayan-templates-gemini-owner", "true");
+    render(<TemplateStudio toolName="Gemini" toolLabel="Gemini" />);
+    fireEvent.click(screen.getByRole("button", { name: "فتح قالب 1" }));
+    const textArea = await screen.findByDisplayValue(longTemplateText);
+    fireEvent.change(textArea, { target: { value: "تعديل سريع" } });
+    fireEvent.click(screen.getByRole("button", { name: "حفظ ونشر القالب" }));
+    await waitFor(() => expect(screen.queryByDisplayValue("تعديل سريع")).toBeNull());
+    expect(mutate.mock.calls.at(-1)?.[0]).toMatchObject({ id: 8, text: "تعديل سريع" });
+    expect(mutate.mock.calls.at(-1)?.[0]).not.toHaveProperty("mediaData");
   });
 });

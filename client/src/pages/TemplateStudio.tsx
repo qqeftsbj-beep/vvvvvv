@@ -193,12 +193,15 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const saveTemplate = () => {
     if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
     if (!isOwner) return toast("اضغط إضافة قالب جديد وأدخل كلمة المرور أولًا.");
+    if (authLoading) return toast("جارٍ التحقق من جلسة المالك...");
     if (!isAuthenticated) { startLogin(); return; }
     if (!mediaData || !text.trim()) return toast.error("أضف صورة أو فيديو ونصًا قبل الحفظ.");
     const payload = { tool: toolName, text: text.trim(), mediaType, mediaData, imageName: mediaName || `abu-kayan-${mediaType}` };
     if (activeTemplate?.serverId) {
+      // Existing templates use a storage URL. Upload only when a new local file was selected.
+      const newMedia = mediaData.startsWith("data:") ? { mediaData } : {};
       updateTemplateMutation.mutate(
-        { id: activeTemplate.serverId, text: payload.text, mediaType, mediaData, imageName: payload.imageName },
+        { id: activeTemplate.serverId, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName },
         { onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: () => toast.error("تعذر تحديث القالب المشترك.") },
       );
       return;
@@ -223,10 +226,13 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const deleteTemplate = (id: string) => {
     if (!isOwner) return toast("الحذف متاح للمالك بعد فتح محرر القوالب.");
     if (!isAuthenticated) { startLogin(); return; }
+    if (!window.confirm("هل تريد نقل هذا القالب إلى سلة المحذوفات؟ يمكنك استعادته من لوحة المالك.")) return;
     const serverId = templates.find((item) => item.id === id)?.serverId;
-    if (serverId) deleteTemplateMutation.mutate({ id: serverId });
-    if (id === activeId) { resetEditor(); setEditorVisible(false); }
-    toast("تم حذف القالب من المكتبة المشتركة.");
+    if (!serverId) return;
+    deleteTemplateMutation.mutate({ id: serverId }, {
+      onSuccess: () => { if (id === activeId) { resetEditor(); setEditorVisible(false); } toast.success("تم نقل القالب إلى سلة المحذوفات."); },
+      onError: () => toast.error("تعذر نقل القالب إلى سلة المحذوفات."),
+    });
   };
 
   const copyValue = async (value: string, id: string) => {
@@ -304,8 +310,8 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     <header className="studio-header"><Link href="/" className="studio-back"><ArrowRight size={17} /> العودة للموقع</Link><div className="studio-header-actions"><button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><div className="studio-brand"><Sparkles size={17} /> أبو كيان الجنيد</div></div></header>
     <section className="studio-hero"><div className="studio-kicker"><span /> مساحة {toolLabel}</div><h1>مكتبة تصاميم<br /><em>تتوسع معك.</em></h1><p>تصفح القوالب المنشورة، وانسخ النص أو حمّل الملف من البطاقة. لإضافة قالب جديد استخدم الزر العلوي وأدخل كلمة المرور.</p><div className="studio-steps"><span><b>01</b> إضافة</span><i /><span><b>02</b> صورة أو فيديو</span><i /><span><b>03</b> نشر</span></div></section>
     <section className={`studio-layout ${editorVisible ? "has-editor" : "library-only"}`}>
-      {editorVisible && <div className="studio-editor-panel">
-        <div className="studio-panel-top"><div><span className="studio-label">المحرر الخاص بالمالك</span><h2>{activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"}</h2></div><button type="button" className="studio-ghost-button" onClick={openCreator}><Plus size={16} /> قالب جديد</button></div>
+      {editorVisible && <div className="studio-editor-panel" role="dialog" aria-modal="true" aria-labelledby="template-editor-title">
+        <div className="studio-panel-top"><div><span className="studio-label">المحرر الخاص بالمالك</span><h2 id="template-editor-title">{activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"}</h2></div><div className="studio-panel-actions"><button type="button" className="studio-ghost-button" onClick={openCreator}><Plus size={16} /> قالب جديد</button><button type="button" className="studio-close-button" onClick={() => { setEditorVisible(false); resetEditor(); }} aria-label="إغلاق محرر القالب">×</button></div></div>
         <div className={`owner-control ${isOwner ? "is-unlocked" : ""}`}>
           {isOwner ? <><span><Check size={15} /> وضع المالك مفتوح</span>{!authLoading && !isAuthenticated && <button type="button" onClick={startLogin}>تسجيل دخول المالك</button>}<button type="button" onClick={lockOwner}>إغلاق المحرر</button></> : <><span>أدخل كلمة المرور لفتح الإضافة</span><div><input type="password" inputMode="numeric" maxLength={32} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="كلمة مرور القوالب" aria-label="كلمة مرور القوالب" /><button type="button" onClick={unlockOwner}>فتح الإضافة</button></div></>}
         </div>

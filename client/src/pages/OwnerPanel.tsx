@@ -3,11 +3,14 @@
 */
 
 import { ChangeEvent, useEffect, useState } from "react";
-import { ArrowRight, Check, ImagePlus, LockKeyhole, LogOut, Moon, Plus, Save, Sun, Trash2 } from "lucide-react";
+import { ArrowRight, Check, ImagePlus, LockKeyhole, LogOut, Moon, Plus, RotateCcw, Save, Sun, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { EditableButton, EditableProduct, EditableService, SiteContent, defaultSiteContent, loadSiteContent, saveSiteContent } from "@/lib/siteContent";
+import { trpc } from "@/lib/trpc";
+import { startLogin } from "@/const";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const DEFAULT_OWNER_PIN = "770562";
 const OWNER_PIN_KEY = "abu-kayan-owner-pin";
@@ -42,6 +45,14 @@ export default function OwnerPanel() {
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const { theme, toggleTheme } = useTheme();
+  const { isAuthenticated } = useAuth();
+  const recycleQuery = trpc.templates.recycleBin.useQuery(undefined, { enabled: unlocked && isAuthenticated, refetchOnWindowFocus: false });
+  const retentionQuery = trpc.templates.retentionDays.useQuery(undefined, { enabled: unlocked && isAuthenticated, refetchOnWindowFocus: false });
+  const utils = trpc.useUtils();
+  const restoreMutation = trpc.templates.restore.useMutation({ onSuccess: () => utils.templates.recycleBin.invalidate() });
+  const purgeMutation = trpc.templates.purge.useMutation({ onSuccess: () => utils.templates.recycleBin.invalidate() });
+  const cleanupMutation = trpc.templates.cleanup.useMutation({ onSuccess: (result) => { utils.templates.recycleBin.invalidate(); toast.success(`تم تفريغ ${result.deleted} قالب منتهي.`); } });
+  const setRetentionMutation = trpc.templates.setRetentionDays.useMutation({ onSuccess: () => { utils.templates.retentionDays.invalidate(); toast.success("تم حفظ مدة الاحتفاظ في قاعدة البيانات."); } });
 
   useEffect(() => setUnlocked(window.sessionStorage.getItem("abu-kayan-owner-panel") === "true"), []);
 
@@ -62,6 +73,9 @@ export default function OwnerPanel() {
 
   const update = <K extends keyof SiteContent>(key: K, value: SiteContent[K]) => setContent((current) => ({ ...current, [key]: value }));
   const updateSetting = <K extends keyof SiteContent["settings"]>(key: K, value: SiteContent["settings"][K]) => setContent((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
+  useEffect(() => {
+    if (retentionQuery.data) updateSetting("recycleRetentionDays", retentionQuery.data as SiteContent["settings"]["recycleRetentionDays"]);
+  }, [retentionQuery.data]);
   const updateService = <K extends keyof EditableService>(index: number, key: K, value: EditableService[K]) => setContent((current) => ({ ...current, services: current.services.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
   const updateProduct = <K extends keyof EditableProduct>(index: number, key: K, value: EditableProduct[K]) => setContent((current) => ({ ...current, products: current.products.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
   const updateButton = <K extends keyof EditableButton>(index: number, key: K, value: EditableButton[K]) => setContent((current) => ({ ...current, buttons: current.buttons.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
@@ -94,6 +108,7 @@ export default function OwnerPanel() {
   const save = () => {
     saveSiteContent(content);
     if (content.settings.themeMode !== theme) toggleTheme();
+    if (isAuthenticated) setRetentionMutation.mutate({ retentionDays: content.settings.recycleRetentionDays });
     toast.success("تم حفظ تعديلات الموقع على هذا الجهاز.");
   };
   const changePassword = () => {
@@ -140,6 +155,7 @@ export default function OwnerPanel() {
         <label><span>خط النصوص</span><select value={content.settings.fontFamily} onChange={(e) => updateSetting("fontFamily", e.target.value as SiteContent["settings"]["fontFamily"])}><option value="Cairo">Cairo</option><option value="Tajawal">Tajawal</option><option value="Noto Kufi Arabic">Noto Kufi Arabic</option><option value="system">خط الجهاز</option></select></label>
         <label><span>خط العناوين</span><select value={content.settings.headingFontFamily} onChange={(e) => updateSetting("headingFontFamily", e.target.value as SiteContent["settings"]["headingFontFamily"])}><option value="Cairo">Cairo</option><option value="Tajawal">Tajawal</option><option value="Noto Kufi Arabic">Noto Kufi Arabic</option><option value="system">خط الجهاز</option></select></label>
         <label><span>الوضع عند الحفظ</span><select value={content.settings.themeMode} onChange={(e) => updateSetting("themeMode", e.target.value as SiteContent["settings"]["themeMode"])}><option value="dark">داكن كامل</option><option value="light">فاتح كامل</option></select></label>
+        <label><span>مدة بقاء المحذوفات</span><select value={content.settings.recycleRetentionDays} onChange={(e) => updateSetting("recycleRetentionDays", Number(e.target.value) as SiteContent["settings"]["recycleRetentionDays"])}><option value={30}>30 يومًا</option><option value={60}>60 يومًا</option><option value={180}>6 أشهر</option><option value={365}>سنة</option></select></label>
         <label><span>حجم الخط الأساسي</span><input type="number" min="12" max="24" value={content.settings.baseFontSize} onChange={(e) => updateSetting("baseFontSize", Number(e.target.value))} /></label>
         <label><span>وزن الخط</span><input type="number" min="300" max="900" step="100" value={content.settings.fontWeight} onChange={(e) => updateSetting("fontWeight", Number(e.target.value))} /></label>
         <label><span>ارتفاع السطر</span><input type="number" min="1.2" max="2.6" step=".1" value={content.settings.lineHeight} onChange={(e) => updateSetting("lineHeight", Number(e.target.value))} /></label>
@@ -166,5 +182,7 @@ export default function OwnerPanel() {
     </div></section>
 
     <section className="owner-services-card"><div className="owner-card-heading"><div><span className="studio-label">05 / الأزرار</span><h2>الاسم والمكان والشكل والإجراء</h2></div><button type="button" className="owner-add" onClick={addButton}><Plus size={16} /> إضافة زر</button></div><div className="owner-button-list">{content.buttons.length === 0 && <p className="owner-empty">لا توجد أزرار مخصصة بعد. أضف زرًا واختر موضعه وإجراءه.</p>}{content.buttons.map((button, index) => <div className="owner-button-row" key={button.id}><label><span>اسم الزر</span><input value={button.label} onChange={(e) => updateButton(index, "label", e.target.value)} /></label><label><span>الموضع</span><select value={button.placement} onChange={(e) => updateButton(index, "placement", e.target.value as EditableButton["placement"])}>{Object.entries(placementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>ماذا يفعل؟</span><select value={button.action} onChange={(e) => updateButton(index, "action", e.target.value as EditableButton["action"])}>{Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{button.action === "external" && <label><span>الرابط</span><input value={button.url || ""} onChange={(e) => updateButton(index, "url", e.target.value)} placeholder="https://" /></label>}<label><span>ترتيب الظهور</span><input type="number" min="0" value={button.order ?? index + 1} onChange={(e) => updateButton(index, "order", Number(e.target.value))} /></label><label><span>حجم الخط</span><input type="number" min="9" max="24" value={button.fontSize ?? 12} onChange={(e) => updateButton(index, "fontSize", Number(e.target.value))} /></label><label><span>استدارة الزر</span><input type="number" min="0" max="40" value={button.radius ?? content.settings.buttonRadius} onChange={(e) => updateButton(index, "radius", Number(e.target.value))} /></label><label><span>لون الخلفية</span><input type="color" value={button.backgroundColor || content.settings.goldColor} onChange={(e) => updateButton(index, "backgroundColor", e.target.value)} /></label><label><span>لون النص</span><input type="color" value={button.textColor || content.settings.backgroundColor} onChange={(e) => updateButton(index, "textColor", e.target.value)} /></label><label><span>لون الإطار</span><input type="color" value={button.borderColor || content.settings.goldColor} onChange={(e) => updateButton(index, "borderColor", e.target.value)} /></label><button type="button" className="owner-delete" onClick={() => removeAt("buttons", index)} aria-label="حذف الزر"><Trash2 size={16} /></button></div>)}</div><button type="button" className="owner-save owner-save-bottom" onClick={save}><Save size={16} /> حفظ كل التعديلات</button></section>
+
+    <section className="owner-services-card recycle-bin-card"><div className="owner-card-heading"><div><span className="studio-label">06 / سلة المحذوفات</span><h2>استعادة القوالب المحذوفة</h2></div><Trash2 size={20} /></div><p className="owner-security-note">تُنقل القوالب المحذوفة إلى هنا أولًا. اختر مدة الاحتفاظ من إعدادات الشكل، ثم اضغط التفريغ لحذف ما تجاوز المدة نهائيًا.</p>{!isAuthenticated ? <div className="recycle-login"><p>يلزم تسجيل دخول حساب المالك لإدارة القوالب المشتركة.</p><button type="button" className="owner-save" onClick={startLogin}><LockKeyhole size={16} /> تسجيل دخول المالك</button></div> : <><div className="recycle-toolbar"><span>{recycleQuery.isLoading ? "جارٍ التحميل..." : `${recycleQuery.data?.length || 0} قالب في السلة`}</span><button type="button" className="owner-add" disabled={cleanupMutation.isPending || !recycleQuery.data?.length} onClick={() => cleanupMutation.mutate({ retentionDays: content.settings.recycleRetentionDays })}><Trash2 size={15} /> تفريغ المنتهية</button></div><div className="recycle-list">{!recycleQuery.data?.length && !recycleQuery.isLoading && <p className="owner-empty">سلة المحذوفات فارغة.</p>}{recycleQuery.data?.map((item) => <div className="recycle-row" key={item.id}><div><strong>{item.imageName}</strong><small>{item.tool} · حُذف في {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString("ar-YE") : "—"}</small></div><div className="recycle-actions"><button type="button" className="owner-add" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate({ id: item.id })}><RotateCcw size={14} /> استعادة</button><button type="button" className="owner-delete" disabled={purgeMutation.isPending} onClick={() => { if (window.confirm("حذف نهائي؟ لا يمكن التراجع عن هذا الإجراء.")) purgeMutation.mutate({ id: item.id }); }}><Trash2 size={14} /> حذف نهائي</button></div></div>)}</div></>}</section>
   </main>;
 }

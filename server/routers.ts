@@ -3,7 +3,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
-import { createSharedTemplate, deleteSharedTemplate, listSharedTemplates, updateSharedTemplate } from "./db";
+import { cleanupDeletedSharedTemplates, createSharedTemplate, deleteSharedTemplate, getTemplateRetentionDays, listDeletedSharedTemplates, listSharedTemplates, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateSharedTemplate } from "./db";
 import { storagePut } from "./storage";
 
 const toolSchema = z.enum(["Gemini", "Chat GBT"]);
@@ -54,6 +54,12 @@ export const appRouter = router({
       return updateSharedTemplate(input.id, update);
     }),
     remove: adminProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteSharedTemplate(input.id)),
+    recycleBin: adminProcedure.query(() => listDeletedSharedTemplates()),
+    restore: adminProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => restoreSharedTemplate(input.id)),
+    purge: adminProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => purgeSharedTemplate(input.id)),
+    cleanup: adminProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365).default(30) })).mutation(({ input }) => cleanupDeletedSharedTemplates(input.retentionDays)),
+    retentionDays: adminProcedure.query(() => getTemplateRetentionDays()),
+    setRetentionDays: adminProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365) })).mutation(({ input }) => setTemplateRetentionDays(input.retentionDays)),
   }),
 });
 

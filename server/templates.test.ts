@@ -7,15 +7,27 @@ const mocks = vi.hoisted(() => ({
   createSharedTemplate: vi.fn(),
   updateSharedTemplate: vi.fn(),
   deleteSharedTemplate: vi.fn(),
+  listDeletedSharedTemplates: vi.fn(),
+  restoreSharedTemplate: vi.fn(),
+  purgeSharedTemplate: vi.fn(),
+  cleanupDeletedSharedTemplates: vi.fn(),
+  getTemplateRetentionDays: vi.fn(),
+  setTemplateRetentionDays: vi.fn(),
   storagePut: vi.fn(),
 }));
-const { listSharedTemplates, createSharedTemplate, updateSharedTemplate, deleteSharedTemplate, storagePut } = mocks;
+const { listSharedTemplates, createSharedTemplate, updateSharedTemplate, deleteSharedTemplate, listDeletedSharedTemplates, restoreSharedTemplate, purgeSharedTemplate, cleanupDeletedSharedTemplates, getTemplateRetentionDays, setTemplateRetentionDays, storagePut } = mocks;
 
 vi.mock("./db", () => ({
   listSharedTemplates: mocks.listSharedTemplates,
   createSharedTemplate: mocks.createSharedTemplate,
   updateSharedTemplate: mocks.updateSharedTemplate,
   deleteSharedTemplate: mocks.deleteSharedTemplate,
+  listDeletedSharedTemplates: mocks.listDeletedSharedTemplates,
+  restoreSharedTemplate: mocks.restoreSharedTemplate,
+  purgeSharedTemplate: mocks.purgeSharedTemplate,
+  cleanupDeletedSharedTemplates: mocks.cleanupDeletedSharedTemplates,
+  getTemplateRetentionDays: mocks.getTemplateRetentionDays,
+  setTemplateRetentionDays: mocks.setTemplateRetentionDays,
 }));
 vi.mock("./storage", () => ({ storagePut: mocks.storagePut }));
 
@@ -104,5 +116,28 @@ describe("shared templates", () => {
     expect(result).toEqual({ id: 3, tool: "Gemini" });
     expect(storagePut).toHaveBeenCalled();
     expect(createSharedTemplate).toHaveBeenCalledWith(expect.objectContaining({ tool: "Gemini", imageKey: "shared/x.png", imageUrl: "/manus-storage/shared/x.png", createdByOpenId: "admin" }));
+  });
+
+  it("protects recycle-bin operations and forwards retention settings", async () => {
+    const deleted = [{ id: 9, tool: "Gemini", deletedAt: new Date() }];
+    listDeletedSharedTemplates.mockResolvedValue(deleted);
+    restoreSharedTemplate.mockResolvedValue({ success: true });
+    purgeSharedTemplate.mockResolvedValue({ success: true });
+    cleanupDeletedSharedTemplates.mockResolvedValue({ success: true, deleted: 2 });
+    getTemplateRetentionDays.mockResolvedValue(60);
+    setTemplateRetentionDays.mockResolvedValue({ retentionDays: 180 });
+    const ownerSession = appRouter.createCaller(context(admin));
+    await expect(ownerSession.templates.recycleBin()).resolves.toEqual(deleted);
+    await expect(ownerSession.templates.restore({ id: 9 })).resolves.toEqual({ success: true });
+    await expect(ownerSession.templates.purge({ id: 9 })).resolves.toEqual({ success: true });
+    await expect(ownerSession.templates.cleanup({ retentionDays: 180 })).resolves.toEqual({ success: true, deleted: 2 });
+    await expect(ownerSession.templates.retentionDays()).resolves.toBe(60);
+    await expect(ownerSession.templates.setRetentionDays({ retentionDays: 180 })).resolves.toEqual({ retentionDays: 180 });
+    expect(cleanupDeletedSharedTemplates).toHaveBeenCalledWith(180);
+    expect(setTemplateRetentionDays).toHaveBeenCalledWith(180);
+
+    const visitorSession = appRouter.createCaller(context(regularUser));
+    await expect(visitorSession.templates.recycleBin()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(visitorSession.templates.restore({ id: 9 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

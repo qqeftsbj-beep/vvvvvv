@@ -24,6 +24,13 @@ export const sharedTemplates = mysqlTable("shared_templates", {
   createdByOpenId: varchar("createdByOpenId", { length: 64 }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  deletedAt: timestamp("deletedAt"),
+});
+
+export const templateSettings = mysqlTable("template_settings", {
+  id: int("id").primaryKey(),
+  retentionDays: int("retentionDays").default(30).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type User = typeof users.$inferSelect;

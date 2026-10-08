@@ -52,6 +52,7 @@ export type SiteSettings = {
   goldColor: string;
   backgroundImage: string;
   templatePassword: string;
+  recycleRetentionDays: 30 | 60 | 180 | 365;
   themeMode: "dark" | "light";
 };
 
@@ -107,6 +108,7 @@ export const defaultSiteContent: SiteContent = {
     goldColor: "#d5b36a",
     backgroundImage: "",
     templatePassword: "7705",
+    recycleRetentionDays: 30,
     themeMode: "dark",
   },
 };

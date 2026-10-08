@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertSharedTemplate, InsertUser, sharedTemplates, User, users } from "../drizzle/schema";
+import { InsertSharedTemplate, InsertUser, sharedTemplates, templateSettings, User, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -41,7 +41,13 @@ export async function getUserByOpenId(openId: string): Promise<User | undefined>
 export async function listSharedTemplates(tool: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(sharedTemplates).where(eq(sharedTemplates.tool, tool)).orderBy(desc(sharedTemplates.createdAt));
+  return db.select().from(sharedTemplates).where(and(eq(sharedTemplates.tool, tool), isNull(sharedTemplates.deletedAt))).orderBy(desc(sharedTemplates.createdAt));
+}
+
+export async function listDeletedSharedTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(sharedTemplates).where(isNotNull(sharedTemplates.deletedAt)).orderBy(desc(sharedTemplates.deletedAt));
 }
 
 export async function createSharedTemplate(input: InsertSharedTemplate) {
@@ -56,14 +62,54 @@ export async function createSharedTemplate(input: InsertSharedTemplate) {
 export async function updateSharedTemplate(id: number, input: Partial<InsertSharedTemplate>) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.update(sharedTemplates).set(input).where(eq(sharedTemplates.id, id));
+  await db.update(sharedTemplates).set(input).where(and(eq(sharedTemplates.id, id), isNull(sharedTemplates.deletedAt)));
   const rows = await db.select().from(sharedTemplates).where(eq(sharedTemplates.id, id)).limit(1);
   return rows[0];
 }
 
-export async function deleteSharedTemplate(id: number) {
+export async function softDeleteSharedTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(sharedTemplates).set({ deletedAt: new Date() }).where(eq(sharedTemplates.id, id));
+  return { success: true } as const;
+}
+
+export async function restoreSharedTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(sharedTemplates).set({ deletedAt: null }).where(eq(sharedTemplates.id, id));
+  return { success: true } as const;
+}
+
+export async function purgeSharedTemplate(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(sharedTemplates).where(eq(sharedTemplates.id, id));
   return { success: true } as const;
 }
+
+export async function cleanupDeletedSharedTemplates(retentionDays = 30) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const cutoff = new Date(Date.now() - Math.max(30, Math.min(365, retentionDays)) * 86400000);
+  const result = await db.delete(sharedTemplates).where(lt(sharedTemplates.deletedAt, cutoff));
+  return { success: true, deleted: Number(result[0].affectedRows || 0) } as const;
+}
+
+export async function getTemplateRetentionDays() {
+  const db = await getDb();
+  if (!db) return 30;
+  const rows = await db.select().from(templateSettings).where(eq(templateSettings.id, 1)).limit(1);
+  return rows[0]?.retentionDays ?? 30;
+}
+
+export async function setTemplateRetentionDays(retentionDays: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const bounded = Math.max(30, Math.min(365, Math.round(retentionDays)));
+  await db.insert(templateSettings).values({ id: 1, retentionDays: bounded }).onDuplicateKeyUpdate({ set: { retentionDays: bounded } });
+  return { retentionDays: bounded } as const;
+}
+
+/** Backward-compatible alias used by existing callers and tests. */
+export const deleteSharedTemplate = softDeleteSharedTemplate;
