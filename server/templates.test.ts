@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { ENV } from "./_core/env";
 
 const mocks = vi.hoisted(() => ({
   listSharedTemplates: vi.fn(),
@@ -41,6 +42,16 @@ function context(user?: TrpcContext["user"]): TrpcContext {
 
 const admin = { id: 1, openId: "admin", role: "admin", name: "Admin", email: null, loginMethod: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } as const;
 const regularUser = { id: 2, openId: "user", role: "user", name: "User", email: null, loginMethod: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } as const;
+const templatePassword = ENV.templatePassword;
+
+const createInput = (overrides: Record<string, unknown> = {}) => ({
+  tool: "Gemini" as const,
+  text: "نص",
+  imageData: "data:image/png;base64,AA==",
+  imageName: "x.png",
+  ownerPassword: templatePassword,
+  ...overrides,
+});
 
 describe("shared templates", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -68,12 +79,12 @@ describe("shared templates", () => {
     deleteSharedTemplate.mockResolvedValue({ success: true });
 
     const ownerSession = appRouter.createCaller(context(admin));
-    await ownerSession.templates.create({ tool: "Gemini", text: first.text, imageData: "data:image/png;base64,AA==", imageName: "first.png" });
-    await ownerSession.templates.create({ tool: "Gemini", text: second.text, imageData: "data:image/png;base64,AA==", imageName: "second.png" });
+    await ownerSession.templates.create(createInput({ text: first.text, imageName: "first.png" }));
+    await ownerSession.templates.create(createInput({ text: second.text, imageName: "second.png" }));
 
     const visitorSession = appRouter.createCaller(context());
     await expect(visitorSession.templates.list({ tool: "Gemini" })).resolves.toEqual([second, first]);
-    await expect(ownerSession.templates.remove({ id: second.id })).resolves.toEqual({ success: true });
+    await expect(ownerSession.templates.remove({ id: second.id, ownerPassword: templatePassword })).resolves.toEqual({ success: true });
     expect(deleteSharedTemplate).toHaveBeenCalledWith(second.id);
   });
 
@@ -84,38 +95,45 @@ describe("shared templates", () => {
     listSharedTemplates.mockResolvedValue([saved]);
 
     const ownerSession = appRouter.createCaller(context(admin));
-    await ownerSession.templates.create({ tool: "Gemini", text: "نص جديد", imageData: "data:image/png;base64,AA==", imageName: "x.png" });
+    await ownerSession.templates.create(createInput({ text: "نص جديد" }));
 
     const visitorSession = appRouter.createCaller(context());
     await expect(visitorSession.templates.list({ tool: "Gemini" })).resolves.toEqual([saved]);
     expect(listSharedTemplates).toHaveBeenCalledWith("Gemini");
   });
 
-  it("requires an admin for creating, updating, and removing shared templates", async () => {
-    const visitorSession = appRouter.createCaller(context(regularUser));
-    await expect(visitorSession.templates.create({ tool: "Gemini", text: "نص", imageData: "data:image/png;base64,AA==", imageName: "x.png" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(visitorSession.templates.update({ id: 3, text: "تعديل" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(visitorSession.templates.remove({ id: 3 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  it("rejects an incorrect template password", async () => {
+    const visitorSession = appRouter.createCaller(context());
+    await expect(visitorSession.templates.create(createInput({ ownerPassword: "wrong" }))).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(visitorSession.templates.update({ id: 3, text: "تعديل", ownerPassword: "wrong" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(visitorSession.templates.remove({ id: 3, ownerPassword: "wrong" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("updates and removes a template for an admin", async () => {
+  it("updates and removes a template with the correct password", async () => {
     updateSharedTemplate.mockResolvedValue({ id: 3, text: "تعديل المالك" });
     deleteSharedTemplate.mockResolvedValue({ success: true });
     const ownerSession = appRouter.createCaller(context(admin));
 
-    await expect(ownerSession.templates.update({ id: 3, text: "تعديل المالك" })).resolves.toEqual({ id: 3, text: "تعديل المالك" });
-    await expect(ownerSession.templates.remove({ id: 3 })).resolves.toEqual({ success: true });
+    await expect(ownerSession.templates.update({ id: 3, text: "تعديل المالك", ownerPassword: templatePassword })).resolves.toEqual({ id: 3, text: "تعديل المالك" });
+    await expect(ownerSession.templates.remove({ id: 3, ownerPassword: templatePassword })).resolves.toEqual({ success: true });
     expect(updateSharedTemplate).toHaveBeenCalledWith(3, expect.objectContaining({ text: "تعديل المالك", createdByOpenId: "admin" }));
     expect(deleteSharedTemplate).toHaveBeenCalledWith(3);
   });
 
-  it("uploads and creates a template for an admin", async () => {
+  it("uploads and creates a template with the correct password", async () => {
     storagePut.mockResolvedValue({ key: "shared/x.png", url: "/manus-storage/shared/x.png" });
     createSharedTemplate.mockResolvedValue({ id: 3, tool: "Gemini" });
-    const result = await appRouter.createCaller(context(admin)).templates.create({ tool: "Gemini", text: "نص", imageData: "data:image/png;base64,AA==", imageName: "x.png" });
+    const result = await appRouter.createCaller(context(admin)).templates.create(createInput());
     expect(result).toEqual({ id: 3, tool: "Gemini" });
     expect(storagePut).toHaveBeenCalled();
     expect(createSharedTemplate).toHaveBeenCalledWith(expect.objectContaining({ tool: "Gemini", imageKey: "shared/x.png", imageUrl: "/manus-storage/shared/x.png", createdByOpenId: "admin" }));
+  });
+
+  it("allows password owner flow without an OAuth session", async () => {
+    storagePut.mockResolvedValue({ key: "shared/password.png", url: "/manus-storage/password.png" });
+    createSharedTemplate.mockResolvedValue({ id: 11, tool: "Gemini" });
+    const visitorSession = appRouter.createCaller(context());
+    await expect(visitorSession.templates.create(createInput({ text: "حفظ بكلمة المرور", imageName: "password.png" }))).resolves.toEqual({ id: 11, tool: "Gemini" });
   });
 
   it("protects recycle-bin operations and forwards retention settings", async () => {

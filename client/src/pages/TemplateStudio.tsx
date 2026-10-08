@@ -193,15 +193,13 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const saveTemplate = () => {
     if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
     if (!isOwner) return toast("اضغط إضافة قالب جديد وأدخل كلمة المرور أولًا.");
-    if (authLoading) return toast("جارٍ التحقق من جلسة المالك...");
-    if (!isAuthenticated) { startLogin(); return; }
     if (!mediaData || !text.trim()) return toast.error("أضف صورة أو فيديو ونصًا قبل الحفظ.");
-    const payload = { tool: toolName, text: text.trim(), mediaType, mediaData, imageName: mediaName || `abu-kayan-${mediaType}` };
+    const payload = { tool: toolName, text: text.trim(), mediaType, mediaData, imageName: mediaName || `abu-kayan-${mediaType}`, ownerPassword: templatePassword };
     if (activeTemplate?.serverId) {
       // Existing templates use a storage URL. Upload only when a new local file was selected.
       const newMedia = mediaData.startsWith("data:") ? { mediaData } : {};
       updateTemplateMutation.mutate(
-        { id: activeTemplate.serverId, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName },
+        { id: activeTemplate.serverId, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName, ownerPassword: templatePassword },
         { onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: (error) => toast.error(error.message || "تعذر تحديث القالب المشترك.") },
       );
       return;
@@ -225,11 +223,10 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
 
   const deleteTemplate = (id: string) => {
     if (!isOwner) return toast("الحذف متاح للمالك بعد فتح محرر القوالب.");
-    if (!isAuthenticated) { startLogin(); return; }
     if (!window.confirm("هل تريد نقل هذا القالب إلى سلة المحذوفات؟ يمكنك استعادته من لوحة المالك.")) return;
     const serverId = templates.find((item) => item.id === id)?.serverId;
     if (!serverId) return;
-    deleteTemplateMutation.mutate({ id: serverId }, {
+    deleteTemplateMutation.mutate({ id: serverId, ownerPassword: templatePassword }, {
       onSuccess: () => { if (id === activeId) { resetEditor(); setEditorVisible(false); } toast.success("تم نقل القالب إلى سلة المحذوفات."); },
       onError: () => toast.error("تعذر نقل القالب إلى سلة المحذوفات."),
     });

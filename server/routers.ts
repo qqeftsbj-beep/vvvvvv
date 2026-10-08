@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
+import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, ownerProcedure, publicProcedure, router } from "./_core/trpc";
+import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
+import { ENV } from "./_core/env";
 import { cleanupDeletedSharedTemplates, createSharedTemplate, deleteSharedTemplate, getTemplateRetentionDays, listDeletedSharedTemplates, listSharedTemplates, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateSharedTemplate } from "./db";
 import { storagePut } from "./storage";
 
@@ -14,7 +16,14 @@ const templateInput = z.object({
   mediaData: z.string().min(1).optional(),
   imageData: z.string().min(1).optional(),
   imageName: z.string().max(255).default("design-media"),
+  ownerPassword: z.string().min(1).max(128),
 }).refine((input) => Boolean(input.mediaData || input.imageData), { message: "Media data is required" });
+
+function verifyTemplatePassword(password: string) {
+  if (password !== ENV.templatePassword) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور القوالب غير صحيحة." });
+  }
+}
 
 function decodeDataUrl(value: string) {
   const match = value.match(/^data:([^;]+);base64,(.+)$/);
@@ -34,12 +43,14 @@ export const appRouter = router({
   }),
   templates: router({
     list: publicProcedure.input(z.object({ tool: toolSchema })).query(({ input }) => listSharedTemplates(input.tool)),
-    create: ownerProcedure.input(templateInput).mutation(async ({ input, ctx }) => {
+    create: publicProcedure.input(templateInput).mutation(async ({ input, ctx }) => {
+      verifyTemplatePassword(input.ownerPassword);
       const decoded = decodeDataUrl(input.mediaData || input.imageData || "");
       const uploaded = await storagePut(`shared-templates/${input.tool.toLowerCase().replace(/\s+/g, "-")}/${input.imageName}`, decoded.buffer, decoded.contentType);
-      return createSharedTemplate({ tool: input.tool, text: input.text, imageUrl: uploaded.url, imageKey: uploaded.key, imageName: input.imageName, mediaType: input.mediaType, createdByOpenId: ctx.user.openId });
+      return createSharedTemplate({ tool: input.tool, text: input.text, imageUrl: uploaded.url, imageKey: uploaded.key, imageName: input.imageName, mediaType: input.mediaType, createdByOpenId: ctx.user?.openId || "password-owner" });
     }),
-    update: ownerProcedure.input(z.object({ id: z.number(), text: z.string().max(10000).optional(), mediaType: z.enum(["image", "video"]).optional(), mediaData: z.string().optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional() })).mutation(async ({ input, ctx }) => {
+    update: publicProcedure.input(z.object({ id: z.number(), text: z.string().max(10000).optional(), mediaType: z.enum(["image", "video"]).optional(), mediaData: z.string().optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional(), ownerPassword: z.string().min(1).max(128) })).mutation(async ({ input, ctx }) => {
+      verifyTemplatePassword(input.ownerPassword);
       const update: Record<string, unknown> = {};
       if (input.text !== undefined) update.text = input.text;
       if (input.imageName !== undefined) update.imageName = input.imageName;
@@ -50,10 +61,10 @@ export const appRouter = router({
         update.imageUrl = uploaded.url;
         update.imageKey = uploaded.key;
       }
-      update.createdByOpenId = ctx.user.openId;
+      update.createdByOpenId = ctx.user?.openId || "password-owner";
       return updateSharedTemplate(input.id, update);
     }),
-    remove: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteSharedTemplate(input.id)),
+    remove: publicProcedure.input(z.object({ id: z.number(), ownerPassword: z.string().min(1).max(128) })).mutation(({ input }) => { verifyTemplatePassword(input.ownerPassword); return deleteSharedTemplate(input.id); }),
     recycleBin: ownerProcedure.query(() => listDeletedSharedTemplates()),
     restore: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => restoreSharedTemplate(input.id)),
     purge: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => purgeSharedTemplate(input.id)),
