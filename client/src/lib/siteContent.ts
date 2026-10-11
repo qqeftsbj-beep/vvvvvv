@@ -54,7 +54,6 @@ export type SiteSettings = {
   templatePassword: string;
   recycleRetentionDays: 30 | 60 | 180 | 365;
   themeMode: "dark" | "light";
-  customCss: string;
 };
 
 export type SiteContent = {
@@ -111,7 +110,6 @@ export const defaultSiteContent: SiteContent = {
     templatePassword: "7705",
     recycleRetentionDays: 30,
     themeMode: "dark",
-    customCss: "",
   },
 };
 
