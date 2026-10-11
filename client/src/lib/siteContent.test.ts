@@ -4,7 +4,7 @@ import { defaultSiteContent, loadSiteContent, saveSiteContent } from "./siteCont
 describe("site template password setting", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("provides the legacy default and persists a changed template password", () => {
+  it("provides the legacy default and persists code settings", () => {
     const values = new Map<string, string>();
     vi.stubGlobal("window", {
       localStorage: {
@@ -18,7 +18,10 @@ describe("site template password setting", () => {
     expect(defaultSiteContent.settings.headingFontFamily).toBe("Noto Kufi Arabic");
     expect(defaultSiteContent.settings.themeMode).toBe("dark");
     expect(defaultSiteContent.settings.buttonRadius).toBe(0);
+    expect(defaultSiteContent.settings.customCss).toBe("");
     saveSiteContent({ ...defaultSiteContent, settings: { ...defaultSiteContent.settings, templatePassword: "991122" } });
     expect(loadSiteContent().settings.templatePassword).toBe("991122");
+    saveSiteContent({ ...defaultSiteContent, settings: { ...defaultSiteContent.settings, customCss: ".hero { color: red; }" } });
+    expect(loadSiteContent().settings.customCss).toBe(".hero { color: red; }");
   });
 });

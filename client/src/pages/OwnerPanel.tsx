@@ -3,7 +3,7 @@
 */
 
 import { ChangeEvent, useEffect, useState } from "react";
-import { ArrowRight, Check, ImagePlus, LockKeyhole, LogOut, Moon, Plus, RotateCcw, Save, Sun, Trash2 } from "lucide-react";
+import { ArrowRight, Check, Clipboard, Download, ImagePlus, LockKeyhole, LogOut, Moon, Plus, RotateCcw, Save, Sun, Trash2, Upload } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -41,6 +41,7 @@ export default function OwnerPanel() {
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState("");
   const [content, setContent] = useState<SiteContent>(() => loadSiteContent());
+  const [contentJson, setContentJson] = useState(() => JSON.stringify(loadSiteContent(), null, 2));
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -125,6 +126,55 @@ export default function OwnerPanel() {
     saveSiteContent(content);
     toast.success("تم حفظ كلمة مرور إضافة القوالب.");
   };
+  const saveCodeSettings = () => {
+    saveSiteContent(content);
+    toast.success("تم تطبيق CSS المخصص وحفظ إعدادات الموقع.");
+  };
+  const refreshContentJson = () => setContentJson(JSON.stringify(content, null, 2));
+  const applyContentJson = () => {
+    try {
+      const parsed = JSON.parse(contentJson) as Partial<SiteContent>;
+      if (!parsed || typeof parsed !== "object") throw new Error("invalid");
+      setContent((current) => ({ ...current, ...parsed, settings: { ...current.settings, ...(parsed.settings || {}) } }));
+      toast.success("تم تحميل إعدادات JSON إلى المحرر. اضغط حفظ وتطبيق.");
+    } catch {
+      toast.error("صيغة JSON غير صحيحة.");
+    }
+  };
+  const copyCode = async (value: string) => {
+    await navigator.clipboard.writeText(value);
+    toast.success("تم نسخ الكود.");
+  };
+  const exportCodeSettings = () => {
+    const blob = new Blob([JSON.stringify({ customCss: content.settings.customCss, content }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "abu-kayan-owner-code-settings.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success("تم تصدير إعدادات البرمجة.");
+  };
+  const importCodeSettings = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as { customCss?: string; content?: Partial<SiteContent> };
+      if (typeof parsed.customCss === "string") updateSetting("customCss", parsed.customCss);
+      const importedContent = parsed.content;
+      if (importedContent && typeof importedContent === "object") setContent((current) => ({ ...current, ...importedContent, settings: { ...current.settings, ...(importedContent.settings || {}) } }));
+      toast.success("تم استيراد الإعدادات. اضغط حفظ وتطبيق للمراجعة.");
+    } catch {
+      toast.error("ملف البرمجة غير صالح. استخدم JSON مُصدّرًا من هذه اللوحة.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+  const resetCodeSettings = () => {
+    if (!window.confirm("استعادة CSS المخصص إلى الوضع الافتراضي؟")) return;
+    updateSetting("customCss", "");
+    toast.success("تمت استعادة CSS الافتراضي. اضغط حفظ وتطبيق.");
+  };
 
   if (!unlocked) return <main dir="rtl" className="owner-page owner-lock-page"><div className="owner-lock-card"><button type="button" className="theme-toggle owner-lock-theme" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><div className="owner-lock-icon"><LockKeyhole size={25} /></div><span className="studio-label">منطقة خاصة بالمالك</span><h1>لوحة التحكم</h1><p>أدخل كلمة السر للوصول إلى أدوات تعديل الموقع.</p><input autoFocus type="password" inputMode="numeric" value={pin} maxLength={32} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="كلمة السر" aria-label="كلمة السر" /><button type="button" className="owner-save" onClick={unlock}><LockKeyhole size={16} /> فتح اللوحة</button><Link href="/" className="owner-back"><ArrowRight size={15} /> العودة للموقع</Link></div></main>;
 
@@ -183,6 +233,8 @@ export default function OwnerPanel() {
 
     <section className="owner-services-card"><div className="owner-card-heading"><div><span className="studio-label">05 / الأزرار</span><h2>الاسم والمكان والشكل والإجراء</h2></div><button type="button" className="owner-add" onClick={addButton}><Plus size={16} /> إضافة زر</button></div><div className="owner-button-list">{content.buttons.length === 0 && <p className="owner-empty">لا توجد أزرار مخصصة بعد. أضف زرًا واختر موضعه وإجراءه.</p>}{content.buttons.map((button, index) => <div className="owner-button-row" key={button.id}><label><span>اسم الزر</span><input value={button.label} onChange={(e) => updateButton(index, "label", e.target.value)} /></label><label><span>الموضع</span><select value={button.placement} onChange={(e) => updateButton(index, "placement", e.target.value as EditableButton["placement"])}>{Object.entries(placementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>ماذا يفعل؟</span><select value={button.action} onChange={(e) => updateButton(index, "action", e.target.value as EditableButton["action"])}>{Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{button.action === "external" && <label><span>الرابط</span><input value={button.url || ""} onChange={(e) => updateButton(index, "url", e.target.value)} placeholder="https://" /></label>}<label><span>ترتيب الظهور</span><input type="number" min="0" value={button.order ?? index + 1} onChange={(e) => updateButton(index, "order", Number(e.target.value))} /></label><label><span>حجم الخط</span><input type="number" min="9" max="24" value={button.fontSize ?? 12} onChange={(e) => updateButton(index, "fontSize", Number(e.target.value))} /></label><label><span>استدارة الزر</span><input type="number" min="0" max="40" value={button.radius ?? content.settings.buttonRadius} onChange={(e) => updateButton(index, "radius", Number(e.target.value))} /></label><label><span>لون الخلفية</span><input type="color" value={button.backgroundColor || content.settings.goldColor} onChange={(e) => updateButton(index, "backgroundColor", e.target.value)} /></label><label><span>لون النص</span><input type="color" value={button.textColor || content.settings.backgroundColor} onChange={(e) => updateButton(index, "textColor", e.target.value)} /></label><label><span>لون الإطار</span><input type="color" value={button.borderColor || content.settings.goldColor} onChange={(e) => updateButton(index, "borderColor", e.target.value)} /></label><button type="button" className="owner-delete" onClick={() => removeAt("buttons", index)} aria-label="حذف الزر"><Trash2 size={16} /></button></div>)}</div><button type="button" className="owner-save owner-save-bottom" onClick={save}><Save size={16} /> حفظ كل التعديلات</button></section>
 
-    <section className="owner-services-card recycle-bin-card"><div className="owner-card-heading"><div><span className="studio-label">06 / سلة المحذوفات</span><h2>استعادة القوالب المحذوفة</h2></div><Trash2 size={20} /></div><p className="owner-security-note">تُنقل القوالب المحذوفة إلى هنا أولًا. اختر مدة الاحتفاظ من إعدادات الشكل، ثم اضغط التفريغ لحذف ما تجاوز المدة نهائيًا.</p>{!isAuthenticated ? <div className="recycle-login"><p>يلزم تسجيل دخول حساب المالك لإدارة القوالب المشتركة.</p><button type="button" className="owner-save" onClick={startLogin}><LockKeyhole size={16} /> تسجيل دخول المالك</button></div> : <><div className="recycle-toolbar"><span>{recycleQuery.isLoading ? "جارٍ التحميل..." : `${recycleQuery.data?.length || 0} قالب في السلة`}</span><button type="button" className="owner-add" disabled={cleanupMutation.isPending || !recycleQuery.data?.length} onClick={() => cleanupMutation.mutate({ retentionDays: content.settings.recycleRetentionDays })}><Trash2 size={15} /> تفريغ المنتهية</button></div><div className="recycle-list">{!recycleQuery.data?.length && !recycleQuery.isLoading && <p className="owner-empty">سلة المحذوفات فارغة.</p>}{recycleQuery.data?.map((item) => <div className="recycle-row" key={item.id}><div><strong>{item.imageName}</strong><small>{item.tool} · حُذف في {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString("ar-YE") : "—"}</small></div><div className="recycle-actions"><button type="button" className="owner-add" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate({ id: item.id })}><RotateCcw size={14} /> استعادة</button><button type="button" className="owner-delete" disabled={purgeMutation.isPending} onClick={() => { if (window.confirm("حذف نهائي؟ لا يمكن التراجع عن هذا الإجراء.")) purgeMutation.mutate({ id: item.id }); }}><Trash2 size={14} /> حذف نهائي</button></div></div>)}</div></>}</section>
+    <section className="owner-services-card owner-code-card"><div className="owner-card-heading"><div><span className="studio-label">06 / الإعدادات البرمجية</span><h2>محرر CSS وإعدادات الموقع</h2></div><span className="owner-code-badge">آمن · بدون JavaScript</span></div><p className="owner-security-note">اكتب CSS لتعديل شكل أي صفحة أو قالب أو زر، أو استورد ملف JSON سبق تصديره لتعديل المحتوى. لا يتم تشغيل JavaScript عشوائي داخل الموقع؛ تغييرات الكود الكامل تُراجع وتُدمج عبر نسخة جديدة حتى لا يتعطل موقعك.</p><label className="owner-code-label"><span>CSS مخصص للموقع كاملًا</span><textarea className="owner-code-editor" dir="ltr" spellCheck={false} value={content.settings.customCss} onChange={(e) => updateSetting("customCss", e.target.value)} placeholder={".hero-content h1 {\n  letter-spacing: -0.04em;\n}\n\n/* اكتب تنسيقاتك هنا */"} /></label><label className="owner-code-label"><span>JSON لمحتوى الموقع والأزرار والخدمات</span><textarea className="owner-code-editor owner-json-editor" dir="ltr" spellCheck={false} value={contentJson} onChange={(e) => setContentJson(e.target.value)} placeholder={'{\n  "heroTitle": "عنوان جديد"\n}'} /></label><div className="owner-code-actions"><button type="button" className="owner-save" onClick={saveCodeSettings}><Save size={16} /> حفظ وتطبيق</button><button type="button" className="owner-add" onClick={() => copyCode(content.settings.customCss)}><Clipboard size={15} /> نسخ CSS</button><button type="button" className="owner-add" onClick={() => { refreshContentJson(); toast.success("تم تحديث JSON الحالي في المحرر."); }}><Clipboard size={15} /> تحديث JSON</button><button type="button" className="owner-add" onClick={applyContentJson}><Check size={15} /> تطبيق JSON</button><button type="button" className="owner-add" onClick={exportCodeSettings}><Download size={15} /> تصدير JSON</button><label className="owner-add owner-code-upload"><input type="file" accept="application/json,.json" onChange={importCodeSettings} /><Upload size={15} /> استيراد JSON</label><button type="button" className="owner-delete owner-code-reset" onClick={resetCodeSettings}><RotateCcw size={15} /> استعادة الافتراضي</button></div><small className="owner-code-hint">يمكنك نسخ ملف JSON وإرساله إلى أداة ذكاء اصطناعي، ثم استيراده بعد مراجعته. احفظ نسخة احتياطية قبل أي تعديل كبير.</small></section>
+
+    <section className="owner-services-card recycle-bin-card"><div className="owner-card-heading"><div><span className="studio-label">07 / سلة المحذوفات</span><h2>استعادة القوالب المحذوفة</h2></div><Trash2 size={20} /></div><p className="owner-security-note">تُنقل القوالب المحذوفة إلى هنا أولًا. اختر مدة الاحتفاظ من إعدادات الشكل، ثم اضغط التفريغ لحذف ما تجاوز المدة نهائيًا.</p>{!isAuthenticated ? <div className="recycle-login"><p>يلزم تسجيل دخول حساب المالك لإدارة القوالب المشتركة.</p><button type="button" className="owner-save" onClick={startLogin}><LockKeyhole size={16} /> تسجيل دخول المالك</button></div> : <><div className="recycle-toolbar"><span>{recycleQuery.isLoading ? "جارٍ التحميل..." : `${recycleQuery.data?.length || 0} قالب في السلة`}</span><button type="button" className="owner-add" disabled={cleanupMutation.isPending || !recycleQuery.data?.length} onClick={() => cleanupMutation.mutate({ retentionDays: content.settings.recycleRetentionDays })}><Trash2 size={15} /> تفريغ المنتهية</button></div><div className="recycle-list">{!recycleQuery.data?.length && !recycleQuery.isLoading && <p className="owner-empty">سلة المحذوفات فارغة.</p>}{recycleQuery.data?.map((item) => <div className="recycle-row" key={item.id}><div><strong>{item.imageName}</strong><small>{item.tool} · حُذف في {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString("ar-YE") : "—"}</small></div><div className="recycle-actions"><button type="button" className="owner-add" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate({ id: item.id })}><RotateCcw size={14} /> استعادة</button><button type="button" className="owner-delete" disabled={purgeMutation.isPending} onClick={() => { if (window.confirm("حذف نهائي؟ لا يمكن التراجع عن هذا الإجراء.")) purgeMutation.mutate({ id: item.id }); }}><Trash2 size={14} /> حذف نهائي</button></div></div>)}</div></>}</section>
   </main>;
 }
