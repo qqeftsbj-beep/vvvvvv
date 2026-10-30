@@ -13,6 +13,7 @@ import Home from "./pages/Home";
 import TemplateStudio from "./pages/TemplateStudio";
 import OwnerPanel from "./pages/OwnerPanel";
 import OwnerInbox from "./pages/OwnerInbox";
+import FreeSites from "./pages/FreeSites";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/owner" component={OwnerPanel} />
       <Route path="/owner/inbox" component={OwnerInbox} />
+      <Route path="/free-sites" component={FreeSites} />
       <Route path="/templates/gemini">
         <TemplateStudio toolName="Gemini" toolLabel="Gemini" />
       </Route>

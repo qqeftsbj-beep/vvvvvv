@@ -33,7 +33,24 @@ export const templateSettings = mysqlTable("template_settings", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const freeSites = mysqlTable("free_sites", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  url: text("url"),
+  description: text("description"),
+  imageUrl: text("imageUrl"),
+  imageKey: text("imageKey"),
+  additionalText: text("additionalText"),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  isVisible: int("isVisible").default(1).notNull(),
+  createdByOpenId: varchar("createdByOpenId", { length: 64 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type SharedTemplate = typeof sharedTemplates.$inferSelect;
 export type InsertSharedTemplate = typeof sharedTemplates.$inferInsert;
+export type FreeSite = typeof freeSites.$inferSelect;
+export type InsertFreeSite = typeof freeSites.$inferInsert;

@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
-import { cleanupDeletedSharedTemplates, createSharedTemplate, deleteSharedTemplate, getTemplateRetentionDays, listDeletedSharedTemplates, listSharedTemplates, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateSharedTemplate } from "./db";
+import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate } from "./db";
 import { storagePut } from "./storage";
 
 const toolSchema = z.enum(["Gemini", "Chat GBT"]);
@@ -29,6 +29,10 @@ function decodeDataUrl(value: string) {
   const match = value.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) throw new Error("Invalid media data");
   return { contentType: match[1] || "application/octet-stream", buffer: Buffer.from(match[2] || "", "base64") };
+}
+
+function siteFileName(name: string) {
+  return name.trim().replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 80) || "free-site";
 }
 
 export const appRouter = router({
@@ -71,6 +75,60 @@ export const appRouter = router({
     cleanup: ownerProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365).default(30) })).mutation(({ input }) => cleanupDeletedSharedTemplates(input.retentionDays)),
     retentionDays: ownerProcedure.query(() => getTemplateRetentionDays()),
     setRetentionDays: ownerProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365) })).mutation(({ input }) => setTemplateRetentionDays(input.retentionDays)),
+  }),
+  freeSites: router({
+    list: publicProcedure.query(() => listVisibleFreeSites()),
+    adminList: ownerProcedure.query(() => listAllFreeSites()),
+    create: ownerProcedure.input(z.object({
+      name: z.string().trim().min(1).max(255),
+      url: z.string().trim().max(2000).optional(),
+      description: z.string().max(5000).optional(),
+      additionalText: z.string().max(10000).optional(),
+      imageData: z.string().min(1).optional(),
+      imageName: z.string().max(255).optional(),
+      sortOrder: z.number().int().min(0).default(0),
+      isVisible: z.boolean().default(true),
+    })).mutation(async ({ input, ctx }) => {
+      let imageUrl: string | null = null;
+      let imageKey: string | null = null;
+      if (input.imageData) {
+        const decoded = decodeDataUrl(input.imageData);
+        const uploaded = await storagePut(`free-sites/${Date.now()}-${siteFileName(input.imageName || input.name)}`, decoded.buffer, decoded.contentType);
+        imageUrl = uploaded.url;
+        imageKey = uploaded.key;
+      }
+      return createFreeSite({ name: input.name, url: input.url || null, description: input.description || null, additionalText: input.additionalText || null, imageUrl, imageKey, sortOrder: input.sortOrder, isVisible: input.isVisible ? 1 : 0, createdByOpenId: ctx.user.openId });
+    }),
+    update: ownerProcedure.input(z.object({
+      id: z.number(),
+      name: z.string().trim().min(1).max(255).optional(),
+      url: z.string().trim().max(2000).optional(),
+      description: z.string().max(5000).optional(),
+      additionalText: z.string().max(10000).optional(),
+      imageData: z.string().min(1).optional(),
+      imageName: z.string().max(255).optional(),
+      clearImage: z.boolean().optional(),
+      sortOrder: z.number().int().min(0).optional(),
+    })).mutation(async ({ input }) => {
+      const update: Record<string, unknown> = {};
+      for (const key of ["name", "url", "description", "additionalText", "sortOrder"] as const) {
+        if (input[key] !== undefined) update[key] = input[key] || null;
+      }
+      if (input.clearImage) { update.imageUrl = null; update.imageKey = null; }
+      if (input.imageData) {
+        const decoded = decodeDataUrl(input.imageData);
+        const uploaded = await storagePut(`free-sites/updates/${Date.now()}-${siteFileName(input.imageName || "free-site")}`, decoded.buffer, decoded.contentType);
+        update.imageUrl = uploaded.url;
+        update.imageKey = uploaded.key;
+      }
+      return updateFreeSite(input.id, update);
+    }),
+    setVisibility: ownerProcedure.input(z.object({ id: z.number(), isVisible: z.boolean() })).mutation(({ input }) => updateFreeSite(input.id, { isVisible: input.isVisible ? 1 : 0 })),
+    remove: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteFreeSite(input.id)),
+    reorder: ownerProcedure.input(z.object({ ids: z.array(z.number()).max(200) })).mutation(async ({ input }) => {
+      await Promise.all(input.ids.map((id, index) => updateFreeSite(id, { sortOrder: index })));
+      return listAllFreeSites();
+    }),
   }),
 });
 

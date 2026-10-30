@@ -10,6 +10,7 @@ import {
   ArrowUpLeft,
   ArrowUp,
   Check,
+  Globe2,
   Moon,
   Sun,
   ChevronDown,
@@ -125,6 +126,17 @@ export default function Home() {
     window.addEventListener("abu-kayan-content-updated", syncContent);
     return () => window.removeEventListener("abu-kayan-content-updated", syncContent);
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     document.documentElement.classList.add("motion-ready");
@@ -285,6 +297,19 @@ export default function Home() {
         </div>
       </header>
 
+      <div className={`mobile-drawer-backdrop ${menuOpen ? "is-open" : ""}`} onClick={() => setMenuOpen(false)} aria-hidden="true" />
+      <aside className={`mobile-service-drawer ${menuOpen ? "is-open" : ""}`} aria-label="قائمة الخدمات الجانبية" aria-hidden={!menuOpen}>
+        <div className="mobile-drawer-head"><div><span className="studio-label">دليل الموقع</span><strong>الخدمات والتنقل</strong></div><button type="button" onClick={() => setMenuOpen(false)} aria-label="إغلاق القائمة"><X size={20} /></button></div>
+        <div className="mobile-drawer-links">
+          <button type="button" onClick={() => handleNav("services")}><span>01</span><strong>الخدمات</strong><ArrowLeft size={15} /></button>
+          {content.services.map((service, index) => <button type="button" key={`${service.number}-${index}`} onClick={() => { setMenuOpen(false); handlePlaceholder(`خدمة ${service.title}`); }}><span>{service.number}</span><strong>{service.title}</strong><ArrowLeft size={15} /></button>)}
+          <button type="button" onClick={() => handleNav("work")}><span>02</span><strong>أعمال مختارة</strong><ArrowLeft size={15} /></button>
+          <button type="button" onClick={() => handleNav("process")}><span>03</span><strong>كيف نعمل</strong><ArrowLeft size={15} /></button>
+          <button type="button" onClick={() => handleNav("contact")}><span>04</span><strong>تواصل</strong><ArrowLeft size={15} /></button>
+        </div>
+        <div className="mobile-drawer-foot"><Globe2 size={15} /> صنع في اليمن · أونلاين</div>
+      </aside>
+
       {searchOpen && <section className="site-search" role="search" aria-label="البحث في الموقع">
         <div className="site-search-inner">
           <div className="site-search-heading"><span className="eyebrow"><Search size={14} /> بحث عام</span><button type="button" onClick={() => { setSearchOpen(false); setSearchTerm(""); }} aria-label="إغلاق البحث">×</button></div>
@@ -309,13 +334,6 @@ export default function Home() {
           <div className="hero-actions">
             <button
               type="button"
-              className="button button-primary"
-              onClick={() => handleNav("contact")}
-            >
-              {content.primaryButton} <ArrowLeft size={17} />
-            </button>
-            <button
-              type="button"
               className="button button-quiet"
               onClick={() => handleNav("work")}
             >
@@ -325,6 +343,7 @@ export default function Home() {
           <div className="ai-tool-actions" aria-label="أدوات التصميم بالذكاء الاصطناعي">
             <Link href="/templates/gemini" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Gemini <ArrowLeft size={15} /></Link>
             <Link href="/templates/chat-gbt" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Chat GBT <ArrowLeft size={15} /></Link>
+            <Link href="/free-sites" className="ai-tool-button"><Globe2 size={16} /> مواقع وخدمات مجانية مختارة <ArrowLeft size={15} /></Link>
           </div>
           {customButtons("hero").length > 0 && <div className="custom-hero-actions">{customButtons("hero").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
           <div className="hero-proof">

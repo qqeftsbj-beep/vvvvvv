@@ -1,6 +1,6 @@
-import { and, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertSharedTemplate, InsertUser, sharedTemplates, templateSettings, User, users } from "../drizzle/schema";
+import { FreeSite, InsertFreeSite, InsertSharedTemplate, InsertUser, freeSites, sharedTemplates, templateSettings, User, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -113,3 +113,39 @@ export async function setTemplateRetentionDays(retentionDays: number) {
 
 /** Backward-compatible alias used by existing callers and tests. */
 export const deleteSharedTemplate = softDeleteSharedTemplate;
+
+export async function listVisibleFreeSites() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(freeSites).where(eq(freeSites.isVisible, 1)).orderBy(asc(freeSites.sortOrder), desc(freeSites.createdAt));
+}
+
+export async function listAllFreeSites() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(freeSites).orderBy(asc(freeSites.sortOrder), desc(freeSites.createdAt));
+}
+
+export async function createFreeSite(input: InsertFreeSite) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(freeSites).values(input);
+  const id = Number(result[0].insertId);
+  const rows = await db.select().from(freeSites).where(eq(freeSites.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function updateFreeSite(id: number, input: Partial<InsertFreeSite>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(freeSites).set(input).where(eq(freeSites.id, id));
+  const rows = await db.select().from(freeSites).where(eq(freeSites.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function deleteFreeSite(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(freeSites).where(eq(freeSites.id, id));
+  return { success: true } as const;
+}

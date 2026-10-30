@@ -14,9 +14,14 @@ const mocks = vi.hoisted(() => ({
   cleanupDeletedSharedTemplates: vi.fn(),
   getTemplateRetentionDays: vi.fn(),
   setTemplateRetentionDays: vi.fn(),
+  listVisibleFreeSites: vi.fn(),
+  listAllFreeSites: vi.fn(),
+  createFreeSite: vi.fn(),
+  updateFreeSite: vi.fn(),
+  deleteFreeSite: vi.fn(),
   storagePut: vi.fn(),
 }));
-const { listSharedTemplates, createSharedTemplate, updateSharedTemplate, deleteSharedTemplate, listDeletedSharedTemplates, restoreSharedTemplate, purgeSharedTemplate, cleanupDeletedSharedTemplates, getTemplateRetentionDays, setTemplateRetentionDays, storagePut } = mocks;
+const { listSharedTemplates, createSharedTemplate, updateSharedTemplate, deleteSharedTemplate, listDeletedSharedTemplates, restoreSharedTemplate, purgeSharedTemplate, cleanupDeletedSharedTemplates, getTemplateRetentionDays, setTemplateRetentionDays, listVisibleFreeSites, listAllFreeSites, createFreeSite, updateFreeSite, deleteFreeSite, storagePut } = mocks;
 
 vi.mock("./db", () => ({
   listSharedTemplates: mocks.listSharedTemplates,
@@ -29,6 +34,11 @@ vi.mock("./db", () => ({
   cleanupDeletedSharedTemplates: mocks.cleanupDeletedSharedTemplates,
   getTemplateRetentionDays: mocks.getTemplateRetentionDays,
   setTemplateRetentionDays: mocks.setTemplateRetentionDays,
+  listVisibleFreeSites: mocks.listVisibleFreeSites,
+  listAllFreeSites: mocks.listAllFreeSites,
+  createFreeSite: mocks.createFreeSite,
+  updateFreeSite: mocks.updateFreeSite,
+  deleteFreeSite: mocks.deleteFreeSite,
 }));
 vi.mock("./storage", () => ({ storagePut: mocks.storagePut }));
 
@@ -157,5 +167,33 @@ describe("shared templates", () => {
     const visitorSession = appRouter.createCaller(context(regularUser));
     await expect(visitorSession.templates.recycleBin()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(visitorSession.templates.restore({ id: 9 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("lists published free sites publicly and keeps management protected", async () => {
+    const published = [{ id: 1, name: "Canva", isVisible: 1, sortOrder: 0 }];
+    listVisibleFreeSites.mockResolvedValue(published);
+    listAllFreeSites.mockResolvedValue([...published, { id: 2, name: "مخفي", isVisible: 0, sortOrder: 1 }]);
+    const visitorSession = appRouter.createCaller(context());
+    await expect(visitorSession.freeSites.list()).resolves.toEqual(published);
+    await expect(visitorSession.freeSites.adminList()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(appRouter.createCaller(context(admin)).freeSites.adminList()).resolves.toHaveLength(2);
+  });
+
+  it("creates, updates, publishes, reorders, and removes a free site", async () => {
+    storagePut.mockResolvedValue({ key: "free-sites/canva.png", url: "/manus-storage/free-sites/canva.png" });
+    const saved = { id: 7, name: "Canva", imageUrl: "/manus-storage/free-sites/canva.png", isVisible: 1, sortOrder: 0 };
+    createFreeSite.mockResolvedValue(saved);
+    updateFreeSite.mockResolvedValue({ ...saved, name: "Canva Pro" });
+    deleteFreeSite.mockResolvedValue({ success: true });
+    listAllFreeSites.mockResolvedValue([saved]);
+    const ownerSession = appRouter.createCaller(context(admin));
+    await expect(ownerSession.freeSites.create({ name: "Canva", url: "https://canva.com", description: "تصميم", additionalText: "", imageData: "data:image/png;base64,AA==", imageName: "canva.png", sortOrder: 0, isVisible: true })).resolves.toEqual(saved);
+    await expect(ownerSession.freeSites.update({ id: 7, name: "Canva Pro", clearImage: true })).resolves.toMatchObject({ name: "Canva Pro" });
+    await expect(ownerSession.freeSites.setVisibility({ id: 7, isVisible: false })).resolves.toMatchObject({ name: "Canva Pro" });
+    await expect(ownerSession.freeSites.reorder({ ids: [7] })).resolves.toEqual([saved]);
+    await expect(ownerSession.freeSites.remove({ id: 7 })).resolves.toEqual({ success: true });
+    expect(createFreeSite).toHaveBeenCalledWith(expect.objectContaining({ name: "Canva", imageKey: "free-sites/canva.png" }));
+    expect(updateFreeSite).toHaveBeenCalledWith(7, expect.objectContaining({ imageUrl: null, imageKey: null }));
+    expect(deleteFreeSite).toHaveBeenCalledWith(7);
   });
 });
