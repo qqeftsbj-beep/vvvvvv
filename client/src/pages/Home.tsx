@@ -395,25 +395,35 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="services-list">
+        <div className="services-list service-cards-grid">
           {content.services.map((service, index) => {
             const Icon = [Sparkles, Megaphone, LayoutTemplate][index % 3];
+            const serviceImage = service.image || portfolio[index % portfolio.length]?.image;
             return (
               <button
                 type="button"
-                className="service-row"
+                className="service-card"
                 data-reveal
                 key={service.number}
                 onClick={() => handlePlaceholder(`خدمة ${service.title}`)}
               >
-                <span className="service-number">{service.number}</span>
-                <span className="service-icon">{service.image ? <img src={service.image} alt="" className="service-icon-image" /> : <Icon size={21} strokeWidth={1.5} />}</span>
-                <span className="service-main">
-                  <strong>{service.title}</strong>
-                  <span>{service.description}</span>
+                <span className="service-card-media">
+                  {serviceImage ? <img src={serviceImage} alt={`صورة ${service.title}`} loading="lazy" /> : <Icon size={34} strokeWidth={1.4} />}
+                  <span className="service-card-number">{service.number}</span>
                 </span>
-                <span className="service-tag">{service.tag}</span>
-                <span className="service-arrow"><ArrowLeft size={20} /></span>
+                <span className="service-card-body">
+                  <span className="service-card-heading">
+                    <span className="service-icon"><Icon size={18} strokeWidth={1.6} /></span>
+                    <strong>{service.title}</strong>
+                  </span>
+                  <span className="service-main">
+                    <span>{service.description}</span>
+                  </span>
+                  <span className="service-card-footer">
+                    <span className="service-tag">{service.tag}</span>
+                    <span className="service-arrow"><ArrowLeft size={18} /></span>
+                  </span>
+                </span>
               </button>
             );
           })}
