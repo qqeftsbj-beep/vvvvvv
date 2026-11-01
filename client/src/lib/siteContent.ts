@@ -23,7 +23,8 @@ export type EditableButton = {
   id: string;
   label: string;
   placement: "hero" | "services" | "contact" | "header";
-  action: "contact" | "services" | "work" | "gemini" | "chat-gbt" | "external";
+  action: "contact" | "services" | "work" | "gemini" | "chat-gbt" | "free-sites" | "creative-space" | "custom-page" | "external";
+  visible?: boolean;
   url?: string;
   backgroundColor?: string;
   textColor?: string;
@@ -56,6 +57,16 @@ export type SiteSettings = {
   themeMode: "dark" | "light";
 };
 
+export type EditablePage = {
+  id: string;
+  slug: string;
+  title: string;
+  eyebrow: string;
+  description: string;
+  template: "directory" | "showcase" | "landing";
+  visible: boolean;
+};
+
 export type SiteContent = {
   heroEyebrow: string;
   heroTitle: string;
@@ -68,6 +79,7 @@ export type SiteContent = {
   services: EditableService[];
   products: EditableProduct[];
   buttons: EditableButton[];
+  pages: EditablePage[];
   settings: SiteSettings;
 };
 
@@ -89,6 +101,7 @@ export const defaultSiteContent: SiteContent = {
   ],
   products: [],
   buttons: [],
+  pages: [],
   settings: {
     fontFamily: "Cairo",
     headingFontFamily: "Noto Kufi Arabic",
@@ -113,20 +126,24 @@ export const defaultSiteContent: SiteContent = {
   },
 };
 
+export function normalizeSiteContent(value: unknown): SiteContent {
+  const saved = (value && typeof value === "object" ? value : {}) as Partial<SiteContent>;
+  return {
+    ...defaultSiteContent,
+    ...saved,
+    services: Array.isArray(saved.services) && saved.services.length ? saved.services : defaultSiteContent.services,
+    products: Array.isArray(saved.products) ? saved.products : defaultSiteContent.products,
+    buttons: Array.isArray(saved.buttons) ? saved.buttons : defaultSiteContent.buttons,
+    pages: Array.isArray(saved.pages) ? saved.pages : defaultSiteContent.pages,
+    settings: { ...defaultSiteContent.settings, ...(saved.settings || {}) },
+  };
+}
+
 export function loadSiteContent(): SiteContent {
   if (typeof window === "undefined") return defaultSiteContent;
   try {
     const raw = window.localStorage.getItem(SITE_CONTENT_KEY);
-    if (!raw) return defaultSiteContent;
-    const saved = JSON.parse(raw) as Partial<SiteContent>;
-    return {
-      ...defaultSiteContent,
-      ...saved,
-      services: Array.isArray(saved.services) && saved.services.length ? saved.services : defaultSiteContent.services,
-      products: Array.isArray(saved.products) ? saved.products : defaultSiteContent.products,
-      buttons: Array.isArray(saved.buttons) ? saved.buttons : defaultSiteContent.buttons,
-      settings: { ...defaultSiteContent.settings, ...(saved.settings || {}) },
-    };
+    return raw ? normalizeSiteContent(JSON.parse(raw)) : defaultSiteContent;
   } catch {
     return defaultSiteContent;
   }

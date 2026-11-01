@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { CreativeSubmission, FreeSite, InsertCreativeSubmission, InsertFreeSite, InsertSharedTemplate, InsertUser, creativeSubmissions, freeSites, sharedTemplates, templateSettings, User, users } from "../drizzle/schema";
+import { CreativeCategory, CreativeSubmission, FreeSite, InsertCreativeCategory, InsertCreativeSubmission, InsertFreeSite, InsertSharedTemplate, InsertUser, creativeCategories, creativeSubmissions, freeSites, sharedTemplates, siteSettings, templateSettings, User, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -187,5 +187,66 @@ export async function deleteCreativeSubmission(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(creativeSubmissions).where(eq(creativeSubmissions.id, id));
+  return { success: true } as const;
+}
+
+
+export async function getSiteContent() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+  return rows[0]?.contentJson || null;
+}
+
+export async function saveSiteContent(contentJson: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(siteSettings).values({ id: 1, contentJson }).onDuplicateKeyUpdate({ set: { contentJson } });
+  return { success: true } as const;
+}
+
+const defaultCreativeCategories: Array<InsertCreativeCategory> = [
+  { name: "الجرافيك والتصميم", slug: "graphic-design", sortOrder: 1, isVisible: 1 },
+  { name: "البرمجة والمواقع", slug: "programming-web", sortOrder: 2, isVisible: 1 },
+  { name: "المونتاج والفيديو", slug: "video-editing", sortOrder: 3, isVisible: 1 },
+  { name: "التصوير", slug: "photography", sortOrder: 4, isVisible: 1 },
+  { name: "الأعمال التجارية", slug: "business", sortOrder: 5, isVisible: 1 },
+  { name: "المشاريع الناشئة", slug: "startups", sortOrder: 6, isVisible: 1 },
+  { name: "الحرف اليدوية", slug: "handmade", sortOrder: 7, isVisible: 1 },
+  { name: "التعليم والخدمات", slug: "education-services", sortOrder: 8, isVisible: 1 },
+  { name: "أخرى", slug: "other", sortOrder: 99, isVisible: 1 },
+];
+
+export async function listCreativeCategories(includeHidden = false) {
+  const db = await getDb();
+  if (!db) return defaultCreativeCategories.map((item, index) => ({ ...item, id: index + 1, createdAt: new Date() }));
+  let rows = await db.select().from(creativeCategories).orderBy(asc(creativeCategories.sortOrder), asc(creativeCategories.createdAt));
+  if (!rows.length) {
+    await db.insert(creativeCategories).values(defaultCreativeCategories);
+    rows = await db.select().from(creativeCategories).orderBy(asc(creativeCategories.sortOrder), asc(creativeCategories.createdAt));
+  }
+  return includeHidden ? rows : rows.filter((row) => row.isVisible === 1);
+}
+
+export async function createCreativeCategory(input: InsertCreativeCategory) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(creativeCategories).values(input);
+  const rows = await db.select().from(creativeCategories).where(eq(creativeCategories.id, Number(result[0].insertId))).limit(1);
+  return rows[0];
+}
+
+export async function updateCreativeCategory(id: number, input: Partial<InsertCreativeCategory>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(creativeCategories).set(input).where(eq(creativeCategories.id, id));
+  const rows = await db.select().from(creativeCategories).where(eq(creativeCategories.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function deleteCreativeCategory(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(creativeCategories).where(eq(creativeCategories.id, id));
   return { success: true } as const;
 }

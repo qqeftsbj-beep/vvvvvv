@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
-import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission } from "./db";
+import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, createCreativeCategory, updateCreativeCategory, deleteCreativeCategory } from "./db";
 import { storagePut } from "./storage";
 
 const toolSchema = z.enum(["Gemini", "Chat GBT"]);
@@ -76,12 +76,31 @@ export const appRouter = router({
     retentionDays: ownerProcedure.query(() => getTemplateRetentionDays()),
     setRetentionDays: ownerProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365) })).mutation(({ input }) => setTemplateRetentionDays(input.retentionDays)),
   }),
+  siteContent: router({
+    get: publicProcedure.query(async () => {
+      const raw = await getSiteContent();
+      if (!raw) return null;
+      try { return JSON.parse(raw) as Record<string, unknown>; } catch { return null; }
+    }),
+    save: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), content: z.record(z.string(), z.unknown()) })).mutation(({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      return saveSiteContent(JSON.stringify(input.content));
+    }),
+  }),
+  creativeCategories: router({
+    list: publicProcedure.query(() => listCreativeCategories(false)),
+    adminList: ownerProcedure.query(() => listCreativeCategories(true)),
+    create: ownerProcedure.input(z.object({ name: z.string().trim().min(1).max(120), slug: z.string().trim().min(1).max(120), sortOrder: z.number().int().min(0).default(0), isVisible: z.boolean().default(true) })).mutation(({ input }) => createCreativeCategory({ ...input, isVisible: input.isVisible ? 1 : 0 })),
+    update: ownerProcedure.input(z.object({ id: z.number(), name: z.string().trim().min(1).max(120).optional(), slug: z.string().trim().min(1).max(120).optional(), sortOrder: z.number().int().min(0).optional(), isVisible: z.boolean().optional() })).mutation(({ input }) => { const { id, isVisible, ...rest } = input; return updateCreativeCategory(id, { ...rest, ...(isVisible === undefined ? {} : { isVisible: isVisible ? 1 : 0 }) }); }),
+    remove: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteCreativeCategory(input.id)),
+  }),
   creativeSpace: router({
     list: publicProcedure.query(() => listApprovedCreativeSubmissions()),
     adminList: ownerProcedure.query(() => listAllCreativeSubmissions()),
     create: publicProcedure.input(z.object({
       projectName: z.string().trim().min(1).max(255),
       description: z.string().trim().min(1).max(5000),
+      category: z.string().trim().min(1).max(120).default("other"),
       link: z.string().trim().max(2000).optional(),
       contact: z.string().trim().max(500).optional(),
       imageData: z.array(z.string().min(1)).max(4).default([]),
@@ -94,10 +113,10 @@ export const appRouter = router({
         const uploaded = await storagePut(`creative-space/${Date.now()}-${index}-${siteFileName(input.projectName)}`, decoded.buffer, decoded.contentType);
         urls.push(uploaded.url); keys.push(uploaded.key);
       }
-      return createCreativeSubmission({ projectName: input.projectName, description: input.description, link: input.link || null, contact: input.contact || null, imageUrls: JSON.stringify(urls), imageKeys: JSON.stringify(keys), status: "pending", isVisible: 0, sortOrder: 0 });
+      return createCreativeSubmission({ projectName: input.projectName, description: input.description, category: input.category, link: input.link || null, contact: input.contact || null, imageUrls: JSON.stringify(urls), imageKeys: JSON.stringify(keys), status: "pending", isVisible: 0, sortOrder: 0 });
     }),
     update: ownerProcedure.input(z.object({
-      id: z.number(), projectName: z.string().trim().min(1).max(255).optional(), description: z.string().trim().min(1).max(5000).optional(), link: z.string().trim().max(2000).optional(), contact: z.string().trim().max(500).optional(), status: z.enum(["pending", "approved", "rejected"]).optional(), isVisible: z.boolean().optional(), sortOrder: z.number().int().min(0).optional(),
+      id: z.number(), projectName: z.string().trim().min(1).max(255).optional(), description: z.string().trim().min(1).max(5000).optional(), category: z.string().trim().min(1).max(120).optional(), link: z.string().trim().max(2000).optional(), contact: z.string().trim().max(500).optional(), status: z.enum(["pending", "approved", "rejected"]).optional(), isVisible: z.boolean().optional(), sortOrder: z.number().int().min(0).optional(),
     })).mutation(({ input }) => { const { id, isVisible, ...rest } = input; return updateCreativeSubmission(id, { ...rest, ...(isVisible === undefined ? {} : { isVisible: isVisible ? 1 : 0 }), link: rest.link || null, contact: rest.contact || null }); }),
     setVisibility: ownerProcedure.input(z.object({ id: z.number(), isVisible: z.boolean() })).mutation(({ input }) => updateCreativeSubmission(input.id, { isVisible: input.isVisible ? 1 : 0, status: input.isVisible ? "approved" : "pending" })),
     remove: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteCreativeSubmission(input.id)),

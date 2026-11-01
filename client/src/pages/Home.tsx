@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
-import { EditableButton, SiteContent, loadSiteContent } from "@/lib/siteContent";
+import { EditableButton, SiteContent, loadSiteContent, normalizeSiteContent, saveSiteContent } from "@/lib/siteContent";
 import { useTheme } from "@/contexts/ThemeContext";
 import ChatAssistant from "@/components/ChatAssistant";
 import { trpc } from "@/lib/trpc";
@@ -120,12 +120,20 @@ export default function Home() {
   const [, navigate] = useLocation();
   const geminiTemplates = trpc.templates.list.useQuery({ tool: "Gemini" }, { staleTime: 30_000 });
   const chatTemplates = trpc.templates.list.useQuery({ tool: "Chat GBT" }, { staleTime: 30_000 });
+  const remoteContent = trpc.siteContent.get.useQuery(undefined, { staleTime: 0, refetchInterval: 10_000, refetchOnWindowFocus: true });
 
   useEffect(() => {
     const syncContent = () => setContent(loadSiteContent());
     window.addEventListener("abu-kayan-content-updated", syncContent);
     return () => window.removeEventListener("abu-kayan-content-updated", syncContent);
   }, []);
+
+  useEffect(() => {
+    if (!remoteContent.data) return;
+    const next = normalizeSiteContent(remoteContent.data);
+    setContent(next);
+    saveSiteContent(next);
+  }, [remoteContent.data]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -189,6 +197,9 @@ export default function Home() {
     }
     if (button.action === "gemini") return navigate("/templates/gemini");
     if (button.action === "chat-gbt") return navigate("/templates/chat-gbt");
+    if (button.action === "free-sites") return navigate("/free-sites");
+    if (button.action === "creative-space") return navigate("/creative-space");
+    if (button.action === "custom-page" && button.url) return navigate(button.url);
     if (button.action === "services") return handleNav("services");
     if (button.action === "work") return handleNav("work");
     handleNav("contact");
@@ -233,7 +244,7 @@ export default function Home() {
     "--dynamic-gold": content.settings.goldColor,
     ...(content.settings.backgroundImage ? { backgroundImage: `linear-gradient(${lightMode ? "rgba(246,241,232,.84), rgba(246,241,232,.92)" : "rgba(8,11,17,.84), rgba(8,11,17,.92)"}), url(${content.settings.backgroundImage})` } : {}),
   } as CSSProperties;
-  const customButtons = (placement: EditableButton["placement"]) => content.buttons.filter((button) => button.placement === placement).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const customButtons = (placement: EditableButton["placement"]) => content.buttons.filter((button) => button.placement === placement && button.visible !== false).sort((a, b) => (a.order || 0) - (b.order || 0));
   const customButtonStyle = (button: EditableButton) => ({ backgroundColor: button.backgroundColor || undefined, color: button.textColor || undefined, borderColor: button.borderColor || undefined, borderRadius: `${button.radius ?? content.settings.buttonRadius}px`, fontSize: button.fontSize ? `${button.fontSize}px` : undefined });
   return (
     <main dir="rtl" className={`site-shell ${lightMode ? "site-light" : ""}`} style={dynamicStyle}>

@@ -33,10 +33,26 @@ export const templateSettings = mysqlTable("template_settings", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const siteSettings = mysqlTable("site_settings", {
+  id: int("id").primaryKey(),
+  contentJson: text("contentJson").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const creativeCategories = mysqlTable("creative_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  slug: varchar("slug", { length: 120 }).notNull().unique(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  isVisible: int("isVisible").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const creativeSubmissions = mysqlTable("creative_submissions", {
   id: int("id").autoincrement().primaryKey(),
   projectName: varchar("projectName", { length: 255 }).notNull(),
   description: text("description").notNull(),
+  category: varchar("category", { length: 120 }).default("other").notNull(),
   imageUrls: text("imageUrls"),
   imageKeys: text("imageKeys"),
   link: text("link"),
@@ -71,3 +87,6 @@ export type FreeSite = typeof freeSites.$inferSelect;
 export type InsertFreeSite = typeof freeSites.$inferInsert;
 export type CreativeSubmission = typeof creativeSubmissions.$inferSelect;
 export type InsertCreativeSubmission = typeof creativeSubmissions.$inferInsert;
+export type SiteSettings = typeof siteSettings.$inferSelect;
+export type CreativeCategory = typeof creativeCategories.$inferSelect;
+export type InsertCreativeCategory = typeof creativeCategories.$inferInsert;

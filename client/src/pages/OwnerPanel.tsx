@@ -7,7 +7,7 @@ import { ArrowRight, Check, ImagePlus, LockKeyhole, LogOut, Moon, Plus, RotateCc
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
-import { EditableButton, EditableProduct, EditableService, SiteContent, defaultSiteContent, loadSiteContent, saveSiteContent } from "@/lib/siteContent";
+import { EditableButton, EditablePage, EditableProduct, EditableService, SiteContent, defaultSiteContent, loadSiteContent, normalizeSiteContent, saveSiteContent } from "@/lib/siteContent";
 import { trpc } from "@/lib/trpc";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -31,6 +31,9 @@ const actionLabels: Record<EditableButton["action"], string> = {
   work: "انتقل إلى الأعمال",
   gemini: "افتح Gemini",
   "chat-gbt": "افتح Chat GBT",
+  "free-sites": "افتح المواقع المجانية",
+  "creative-space": "افتح مساحتك للإبداع",
+  "custom-page": "افتح صفحة قابلة لإعادة الاستخدام",
   external: "رابط خارجي",
 };
 const placementLabels: Record<EditableButton["placement"], string> = {
@@ -47,8 +50,11 @@ export default function OwnerPanel() {
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
+  const [draggedButton, setDraggedButton] = useState<number | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { isAuthenticated } = useAuth();
+  const siteContentQuery = trpc.siteContent.get.useQuery(undefined, { refetchOnWindowFocus: false });
+  const siteContentSave = trpc.siteContent.save.useMutation({ onError: (error) => toast.error(error.message || "تعذر مزامنة إعدادات الموقع.") });
   const recycleQuery = trpc.templates.recycleBin.useQuery(undefined, { enabled: unlocked && isAuthenticated, refetchOnWindowFocus: false });
   const retentionQuery = trpc.templates.retentionDays.useQuery(undefined, { enabled: unlocked && isAuthenticated, refetchOnWindowFocus: false });
   const utils = trpc.useUtils();
@@ -58,6 +64,7 @@ export default function OwnerPanel() {
   const setRetentionMutation = trpc.templates.setRetentionDays.useMutation({ onSuccess: () => { utils.templates.retentionDays.invalidate(); toast.success("تم حفظ مدة الاحتفاظ في قاعدة البيانات."); } });
 
   useEffect(() => setUnlocked(window.sessionStorage.getItem("abu-kayan-owner-panel") === "true"), []);
+  useEffect(() => { if (siteContentQuery.data) setContent(normalizeSiteContent(siteContentQuery.data)); }, [siteContentQuery.data]);
 
   const unlock = () => {
     if (pin === getOwnerPin()) {
@@ -82,6 +89,10 @@ export default function OwnerPanel() {
   const updateService = <K extends keyof EditableService>(index: number, key: K, value: EditableService[K]) => setContent((current) => ({ ...current, services: current.services.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
   const updateProduct = <K extends keyof EditableProduct>(index: number, key: K, value: EditableProduct[K]) => setContent((current) => ({ ...current, products: current.products.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
   const updateButton = <K extends keyof EditableButton>(index: number, key: K, value: EditableButton[K]) => setContent((current) => ({ ...current, buttons: current.buttons.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+  const updatePage = <K extends keyof EditablePage>(index: number, key: K, value: EditablePage[K]) => setContent((current) => ({ ...current, pages: current.pages.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+  const addPage = () => setContent((current) => ({ ...current, pages: [...current.pages, { id: crypto.randomUUID(), slug: `page-${current.pages.length + 1}`, title: "صفحة جديدة", eyebrow: "قالب أبو كيان", description: "اكتب وصف الصفحة هنا.", template: "landing", visible: true }] }));
+  const removePage = (index: number) => setContent((current) => ({ ...current, pages: current.pages.filter((_, i) => i !== index) }));
+  const moveButton = (from: number, to: number) => setContent((current) => { if (from === to || to < 0 || to >= current.buttons.length) return current; const buttons = [...current.buttons]; const [moved] = buttons.splice(from, 1); buttons.splice(to, 0, moved); return { ...current, buttons: buttons.map((button, index) => ({ ...button, order: index + 1 })) }; });
 
   const addService = () => setContent((current) => ({ ...current, services: [...current.services, { number: String(current.services.length + 1).padStart(2, "0"), title: "خدمة جديدة", description: "اكتب وصف الخدمة هنا.", tag: "وصف مختصر" }] }));
   const addProduct = () => setContent((current) => ({ ...current, products: [...current.products, { id: crypto.randomUUID(), title: "منتج جديد", description: "اكتب وصف المنتج هنا.", price: "" }] }));
@@ -110,9 +121,10 @@ export default function OwnerPanel() {
 
   const save = () => {
     saveSiteContent(content);
+    siteContentSave.mutate({ ownerPin: getOwnerPin(), content: content as unknown as Record<string, unknown> });
     if (content.settings.themeMode !== theme) toggleTheme();
     if (isAuthenticated) setRetentionMutation.mutate({ retentionDays: content.settings.recycleRetentionDays });
-    toast.success("تم حفظ تعديلات الموقع على هذا الجهاز.");
+    toast.success("تم حفظ تعديلات الموقع ومزامنتها للجميع.");
   };
   const changePassword = () => {
     if (currentPin !== getOwnerPin()) return toast.error("كلمة المرور الحالية غير صحيحة.");
@@ -126,10 +138,12 @@ export default function OwnerPanel() {
     const password = content.settings.templatePassword.trim();
     if (password.length < 4) return toast.error("اجعل كلمة مرور القوالب 4 أرقام أو أكثر.");
     saveSiteContent(content);
+    siteContentSave.mutate({ ownerPin: getOwnerPin(), content: content as unknown as Record<string, unknown> });
     toast.success("تم حفظ كلمة مرور إضافة القوالب.");
   };
   const applyCodeSettings = (next: SiteContent, _extensions: Record<string, unknown>, label: string) => {
     saveSiteContent(next);
+    siteContentSave.mutate({ ownerPin: getOwnerPin(), content: next as unknown as Record<string, unknown> });
     setContent(next);
     if (next.settings.themeMode !== theme) toggleTheme();
     toast.success(`${label} بنجاح.`);
@@ -190,7 +204,7 @@ export default function OwnerPanel() {
       {content.products.map((product, index) => <div className="owner-service-row product-row" key={product.id}><span className="owner-service-number">منتج</span><label><span>اسم المنتج</span><input value={product.title} onChange={(e) => updateProduct(index, "title", e.target.value)} /></label><label className="owner-wide"><span>الوصف</span><textarea value={product.description} onChange={(e) => updateProduct(index, "description", e.target.value)} /></label><label><span>السعر أو العبارة</span><input value={product.price} onChange={(e) => updateProduct(index, "price", e.target.value)} /></label><label className="owner-image-upload compact-upload"><input type="file" accept="image/*" onChange={(e) => handleProductImage(e, index)} /><span><ImagePlus size={15} /> صورة المنتج</span></label>{product.image && <img className="owner-inline-image" src={product.image} alt="" />}<button type="button" className="owner-delete" onClick={() => removeAt("products", index)} aria-label="حذف المنتج"><Trash2 size={16} /></button></div>)}
     </div></section>
 
-    <section className="owner-services-card"><div className="owner-card-heading"><div><span className="studio-label">05 / الأزرار</span><h2>الاسم والمكان والشكل والإجراء</h2></div><button type="button" className="owner-add" onClick={addButton}><Plus size={16} /> إضافة زر</button></div><div className="owner-button-list">{content.buttons.length === 0 && <p className="owner-empty">لا توجد أزرار مخصصة بعد. أضف زرًا واختر موضعه وإجراءه.</p>}{content.buttons.map((button, index) => <div className="owner-button-row" key={button.id}><label><span>اسم الزر</span><input value={button.label} onChange={(e) => updateButton(index, "label", e.target.value)} /></label><label><span>الموضع</span><select value={button.placement} onChange={(e) => updateButton(index, "placement", e.target.value as EditableButton["placement"])}>{Object.entries(placementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>ماذا يفعل؟</span><select value={button.action} onChange={(e) => updateButton(index, "action", e.target.value as EditableButton["action"])}>{Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{button.action === "external" && <label><span>الرابط</span><input value={button.url || ""} onChange={(e) => updateButton(index, "url", e.target.value)} placeholder="https://" /></label>}<label><span>ترتيب الظهور</span><input type="number" min="0" value={button.order ?? index + 1} onChange={(e) => updateButton(index, "order", Number(e.target.value))} /></label><label><span>حجم الخط</span><input type="number" min="9" max="24" value={button.fontSize ?? 12} onChange={(e) => updateButton(index, "fontSize", Number(e.target.value))} /></label><label><span>استدارة الزر</span><input type="number" min="0" max="40" value={button.radius ?? content.settings.buttonRadius} onChange={(e) => updateButton(index, "radius", Number(e.target.value))} /></label><label><span>لون الخلفية</span><input type="color" value={button.backgroundColor || content.settings.goldColor} onChange={(e) => updateButton(index, "backgroundColor", e.target.value)} /></label><label><span>لون النص</span><input type="color" value={button.textColor || content.settings.backgroundColor} onChange={(e) => updateButton(index, "textColor", e.target.value)} /></label><label><span>لون الإطار</span><input type="color" value={button.borderColor || content.settings.goldColor} onChange={(e) => updateButton(index, "borderColor", e.target.value)} /></label><button type="button" className="owner-delete" onClick={() => removeAt("buttons", index)} aria-label="حذف الزر"><Trash2 size={16} /></button></div>)}</div><button type="button" className="owner-save owner-save-bottom" onClick={save}><Save size={16} /> حفظ كل التعديلات</button></section>
+    <section className="owner-services-card"><div className="owner-card-heading"><div><span className="studio-label">05 / الأزرار والصفحات</span><h2>تحكم بالسحب والإفلات والقوالب الجاهزة</h2></div><div className="owner-header-actions"><button type="button" className="owner-add" onClick={addButton}><Plus size={16} /> إضافة زر</button><button type="button" className="owner-add" onClick={addPage}><Plus size={16} /> صفحة جديدة</button></div></div><p className="owner-security-note">اسحب أي زر إلى مكانه، أخفه دون مساحة فارغة، أو اربطه بصفحة جاهزة. كل التغييرات تُحفظ في قاعدة البيانات عند الضغط على حفظ.</p><div className="owner-button-list">{content.buttons.length === 0 && <p className="owner-empty">لا توجد أزرار مخصصة بعد.</p>}{content.buttons.map((button, index) => <div className="owner-button-row" key={button.id} draggable onDragStart={() => setDraggedButton(index)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggedButton !== null) moveButton(draggedButton, index); setDraggedButton(null); }}><span className="owner-drag-handle" title="اسحب لإعادة الترتيب">⋮⋮</span><label><span>اسم الزر</span><input value={button.label} onChange={(e) => updateButton(index, "label", e.target.value)} /></label><label><span>الموضع</span><select value={button.placement} onChange={(e) => updateButton(index, "placement", e.target.value as EditableButton["placement"])}>{Object.entries(placementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>يفتح</span><select value={button.action} onChange={(e) => updateButton(index, "action", e.target.value as EditableButton["action"])}>{Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{button.action === "custom-page" && <label><span>الصفحة</span><select value={button.url || ""} onChange={(e) => updateButton(index, "url", e.target.value)}><option value="">اختر صفحة</option>{content.pages.map((page) => <option key={page.id} value={`/custom/${page.slug}`}>{page.title}</option>)}</select></label>}{button.action === "external" && <label><span>الرابط</span><input value={button.url || ""} onChange={(e) => updateButton(index, "url", e.target.value)} placeholder="https://" /></label>}<label><span>الظهور</span><select value={button.visible === false ? "hidden" : "visible"} onChange={(e) => updateButton(index, "visible", e.target.value === "visible")}><option value="visible">ظاهر</option><option value="hidden">مخفي</option></select></label><label><span>حجم الخط</span><input type="number" min="9" max="24" value={button.fontSize ?? 12} onChange={(e) => updateButton(index, "fontSize", Number(e.target.value))} /></label><label><span>استدارة الزر</span><input type="number" min="0" max="40" value={button.radius ?? content.settings.buttonRadius} onChange={(e) => updateButton(index, "radius", Number(e.target.value))} /></label><label><span>لون الخلفية</span><input type="color" value={button.backgroundColor || content.settings.goldColor} onChange={(e) => updateButton(index, "backgroundColor", e.target.value)} /></label><label><span>لون النص</span><input type="color" value={button.textColor || content.settings.backgroundColor} onChange={(e) => updateButton(index, "textColor", e.target.value)} /></label><label><span>لون الإطار</span><input type="color" value={button.borderColor || content.settings.goldColor} onChange={(e) => updateButton(index, "borderColor", e.target.value)} /></label><button type="button" className="owner-delete" onClick={() => removeAt("buttons", index)} aria-label="حذف الزر"><Trash2 size={16} /></button></div>)}</div><div className="owner-pages-list"><div className="owner-card-heading"><div><span className="studio-label">قوالب الصفحات</span><h3>صفحات قابلة لإعادة الاستخدام</h3></div></div>{content.pages.length === 0 && <p className="owner-empty">أنشئ صفحة من قالب جاهز لتظهر هنا.</p>}{content.pages.map((page, index) => <div className="owner-page-row" key={page.id}><label><span>العنوان</span><input value={page.title} onChange={(e) => updatePage(index, "title", e.target.value)} /></label><label><span>المسار</span><input value={page.slug} onChange={(e) => updatePage(index, "slug", e.target.value.replace(/[^a-zA-Z0-9-]/g, "-"))} /></label><label><span>القالب</span><select value={page.template} onChange={(e) => updatePage(index, "template", e.target.value as EditablePage["template"])}><option value="landing">واجهة هبوط</option><option value="directory">دليل</option><option value="showcase">معرض</option></select></label><label><span>السطر التعريفي</span><input value={page.eyebrow} onChange={(e) => updatePage(index, "eyebrow", e.target.value)} /></label><label className="owner-wide"><span>الوصف</span><textarea value={page.description} onChange={(e) => updatePage(index, "description", e.target.value)} /></label><label><span>الحالة</span><select value={page.visible ? "visible" : "hidden"} onChange={(e) => updatePage(index, "visible", e.target.value === "visible")}><option value="visible">منشورة</option><option value="hidden">مخفية</option></select></label><button type="button" className="owner-delete" onClick={() => removePage(index)} aria-label="حذف الصفحة"><Trash2 size={16} /></button></div>)}</div><button type="button" className="owner-save owner-save-bottom" onClick={save}><Save size={16} /> حفظ الأزرار والصفحات</button></section>
 
     <OwnerFreeSites unlocked={unlocked} />
     <OwnerCreativeSpace unlocked={unlocked} />

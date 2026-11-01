@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultSiteContent, loadSiteContent, saveSiteContent } from "./siteContent";
+import { defaultSiteContent, loadSiteContent, normalizeSiteContent, saveSiteContent } from "./siteContent";
 
 describe("site template password setting", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -23,5 +23,17 @@ describe("site template password setting", () => {
     expect(defaultSiteContent.settings.goldColor).toBe("#d9b86c");
     saveSiteContent({ ...defaultSiteContent, settings: { ...defaultSiteContent.settings, templatePassword: "991122" } });
     expect(loadSiteContent().settings.templatePassword).toBe("991122");
+  });
+
+  it("normalizes remotely synchronized content without dropping new page templates", () => {
+    const normalized = normalizeSiteContent({
+      heroTitle: "عنوان متزامن",
+      pages: [{ id: "p1", slug: "new-page", title: "صفحة جديدة", eyebrow: "قالب", description: "وصف", template: "landing", visible: true }],
+      settings: { goldColor: "#ffffff" },
+    });
+    expect(normalized.heroTitle).toBe("عنوان متزامن");
+    expect(normalized.pages[0].slug).toBe("new-page");
+    expect(normalized.settings.goldColor).toBe("#ffffff");
+    expect(normalized.services.length).toBeGreaterThan(0);
   });
 });

@@ -15,6 +15,7 @@ import OwnerPanel from "./pages/OwnerPanel";
 import OwnerInbox from "./pages/OwnerInbox";
 import FreeSites from "./pages/FreeSites";
 import CreativeSpace from "./pages/CreativeSpace";
+import CustomPage from "./pages/CustomPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/owner/inbox" component={OwnerInbox} />
       <Route path="/free-sites" component={FreeSites} />
       <Route path="/creative-space" component={CreativeSpace} />
+      <Route path="/custom/:slug" component={CustomPage} />
       <Route path="/templates/gemini">
         <TemplateStudio toolName="Gemini" toolLabel="Gemini" />
       </Route>

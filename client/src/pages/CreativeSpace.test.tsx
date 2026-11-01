@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mutate = vi.fn();
 vi.mock("@/lib/trpc", () => ({
-  trpc: { creativeSpace: { list: { useQuery: () => ({ data: [{ id: 1, projectName: "مشروع جميل", description: "وصف المشروع", imageUrls: [], link: null, contact: null }], isLoading: false }) }, create: { useMutation: () => ({ mutate, isPending: false }) } } },
+  trpc: { creativeSpace: { list: { useQuery: () => ({ data: [{ id: 1, projectName: "مشروع جميل", description: "وصف المشروع", category: "graphic-design", imageUrls: [], link: null, contact: null }], isLoading: false }) }, create: { useMutation: () => ({ mutate, isPending: false }) } }, creativeCategories: { list: { useQuery: () => ({ data: [{ id: 1, name: "الجرافيك والتصميم", slug: "graphic-design" }], isLoading: false }) } } },
 }));
 vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "dark", toggleTheme: vi.fn() }) }));
 vi.mock("sonner", () => { const toast = Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }); return { toast }; });

@@ -36,6 +36,13 @@
       "when": 1793523323235,
       "tag": "0004_kind_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1793554005338,
+      "tag": "0005_wonderful_carnage",
+      "breakpoints": true
     }
   ]
 }
