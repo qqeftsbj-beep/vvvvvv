@@ -331,19 +331,12 @@ export default function Home() {
           <p className="hero-lead">
             {content.heroLead}
           </p>
-          <div className="hero-actions">
-            <button
-              type="button"
-              className="button button-quiet"
-              onClick={() => handleNav("work")}
-            >
-              <Play size={15} fill="currentColor" /> {content.secondaryButton}
-            </button>
-          </div>
+
           <div className="ai-tool-actions" aria-label="أدوات التصميم بالذكاء الاصطناعي">
             <Link href="/templates/gemini" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Gemini <ArrowLeft size={15} /></Link>
             <Link href="/templates/chat-gbt" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Chat GBT <ArrowLeft size={15} /></Link>
             <Link href="/free-sites" className="ai-tool-button"><Globe2 size={16} /> مواقع وخدمات مجانية مختارة <ArrowLeft size={15} /></Link>
+            <Link href="/creative-space" className="ai-tool-button"><Sparkles size={16} /> مساحتك للإبداع <ArrowLeft size={15} /></Link>
           </div>
           {customButtons("hero").length > 0 && <div className="custom-hero-actions">{customButtons("hero").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
           <div className="hero-proof">

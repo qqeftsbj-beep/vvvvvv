@@ -33,6 +33,21 @@ export const templateSettings = mysqlTable("template_settings", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const creativeSubmissions = mysqlTable("creative_submissions", {
+  id: int("id").autoincrement().primaryKey(),
+  projectName: varchar("projectName", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  imageUrls: text("imageUrls"),
+  imageKeys: text("imageKeys"),
+  link: text("link"),
+  contact: varchar("contact", { length: 500 }),
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  isVisible: int("isVisible").default(0).notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const freeSites = mysqlTable("free_sites", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -54,3 +69,5 @@ export type SharedTemplate = typeof sharedTemplates.$inferSelect;
 export type InsertSharedTemplate = typeof sharedTemplates.$inferInsert;
 export type FreeSite = typeof freeSites.$inferSelect;
 export type InsertFreeSite = typeof freeSites.$inferInsert;
+export type CreativeSubmission = typeof creativeSubmissions.$inferSelect;
+export type InsertCreativeSubmission = typeof creativeSubmissions.$inferInsert;

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { FreeSite, InsertFreeSite, InsertSharedTemplate, InsertUser, freeSites, sharedTemplates, templateSettings, User, users } from "../drizzle/schema";
+import { CreativeSubmission, FreeSite, InsertCreativeSubmission, InsertFreeSite, InsertSharedTemplate, InsertUser, creativeSubmissions, freeSites, sharedTemplates, templateSettings, User, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -117,13 +117,13 @@ export const deleteSharedTemplate = softDeleteSharedTemplate;
 export async function listVisibleFreeSites() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(freeSites).where(eq(freeSites.isVisible, 1)).orderBy(asc(freeSites.sortOrder), desc(freeSites.createdAt));
+  return db.select().from(freeSites).where(eq(freeSites.isVisible, 1)).orderBy(desc(freeSites.createdAt), desc(freeSites.sortOrder));
 }
 
 export async function listAllFreeSites() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(freeSites).orderBy(asc(freeSites.sortOrder), desc(freeSites.createdAt));
+  return db.select().from(freeSites).orderBy(desc(freeSites.createdAt), desc(freeSites.sortOrder));
 }
 
 export async function createFreeSite(input: InsertFreeSite) {
@@ -147,5 +147,45 @@ export async function deleteFreeSite(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(freeSites).where(eq(freeSites.id, id));
+  return { success: true } as const;
+}
+
+
+export async function listApprovedCreativeSubmissions() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(creativeSubmissions).where(and(eq(creativeSubmissions.status, "approved"), eq(creativeSubmissions.isVisible, 1))).orderBy(desc(creativeSubmissions.createdAt));
+  return rows.map((row) => ({ ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] }));
+}
+
+export async function listAllCreativeSubmissions() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(creativeSubmissions).orderBy(desc(creativeSubmissions.createdAt));
+  return rows.map((row) => ({ ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] }));
+}
+
+export async function createCreativeSubmission(input: InsertCreativeSubmission) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(creativeSubmissions).values(input);
+  const rows = await db.select().from(creativeSubmissions).where(eq(creativeSubmissions.id, Number(result[0].insertId))).limit(1);
+  const row = rows[0];
+  return row ? { ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] } : row;
+}
+
+export async function updateCreativeSubmission(id: number, input: Partial<InsertCreativeSubmission>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(creativeSubmissions).set(input).where(eq(creativeSubmissions.id, id));
+  const rows = await db.select().from(creativeSubmissions).where(eq(creativeSubmissions.id, id)).limit(1);
+  const row = rows[0];
+  return row ? { ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] } : row;
+}
+
+export async function deleteCreativeSubmission(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(creativeSubmissions).where(eq(creativeSubmissions.id, id));
   return { success: true } as const;
 }
