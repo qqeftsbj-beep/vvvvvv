@@ -50,8 +50,8 @@ export const creativeCategories = mysqlTable("creative_categories", {
 
 export const creativeSubmissions = mysqlTable("creative_submissions", {
   id: int("id").autoincrement().primaryKey(),
-  projectName: varchar("projectName", { length: 255 }).notNull(),
-  description: text("description").notNull(),
+  projectName: varchar("projectName", { length: 255 }),
+  description: text("description"),
   category: varchar("category", { length: 120 }).default("other").notNull(),
   imageUrls: text("imageUrls"),
   imageKeys: text("imageKeys"),

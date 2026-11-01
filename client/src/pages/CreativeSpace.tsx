@@ -10,67 +10,30 @@ const readDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
   reader.onerror = reject;
   reader.readAsDataURL(file);
 });
-
 type GalleryState = { urls: string[]; index: number } | null;
+type FormState = { projectName: string; description: string; category: string; link: string; contact: string };
+const emptyForm: FormState = { projectName: "", description: "", category: "other", link: "", contact: "" };
 
 export default function CreativeSpace() {
-  const [form, setForm] = useState({ projectName: "", description: "", category: "other", link: "", contact: "" });
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [images, setImages] = useState<File[]>([]);
   const [sent, setSent] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [gallery, setGallery] = useState<GalleryState>(null);
   const submissions = trpc.creativeSpace.list.useQuery(undefined, { staleTime: 30_000 });
   const categories = trpc.creativeCategories.list.useQuery(undefined, { staleTime: 60_000 });
   const create = trpc.creativeSpace.create.useMutation({
-    onSuccess: () => { setForm({ projectName: "", description: "", category: "other", link: "", contact: "" }); setImages([]); setSent(true); submissions.refetch(); toast.success("تم إرسال مشاركتك للمراجعة."); },
+    onSuccess: () => { setForm(emptyForm); setImages([]); setFormOpen(false); setSent(true); submissions.refetch(); toast.success("تم إرسال مشاركتك للمراجعة."); },
     onError: (error) => toast.error(error.message || "تعذر إرسال المشاركة.")
   });
-
-  useEffect(() => {
-    if (!gallery) return;
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setGallery(null); };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [gallery]);
-
+  useEffect(() => { if (!gallery) return; const close = (event: KeyboardEvent) => { if (event.key === "Escape") setGallery(null); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [gallery]);
+  useEffect(() => { if (!formOpen) return; const close = (event: KeyboardEvent) => { if (event.key === "Escape") setFormOpen(false); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [formOpen]);
   const visibleSubmissions = useMemo(() => activeCategory === "all" ? submissions.data || [] : (submissions.data || []).filter((item) => item.category === activeCategory), [activeCategory, submissions.data]);
-
-  const chooseImages = (event: ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/"));
-    if (selected.length > 4) return toast.error("يمكنك إضافة 4 صور كحد أقصى.");
-    setImages(selected);
-  };
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!form.projectName.trim() || !form.description.trim()) return toast.error("أدخل اسم المشروع ووصفه.");
-    const imageData = await Promise.all(images.map(readDataUrl));
-    create.mutate({ ...form, imageData });
-  };
-
+  const chooseImages = (event: ChangeEvent<HTMLInputElement>) => { const selected = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/")); if (selected.length > 4) return toast.error("يمكنك إضافة 4 صور كحد أقصى."); setImages(selected); };
+  const submit = async (event: FormEvent) => { event.preventDefault(); const imageData = await Promise.all(images.map(readDataUrl)); if (!form.projectName.trim() && !form.description.trim() && !form.link.trim() && !form.contact.trim() && imageData.length === 0) return toast.error("أضف صورة أو وصفًا أو رابطًا واحدًا على الأقل."); create.mutate({ ...form, imageData }); };
   const openGallery = (urls: string[], index: number) => { if (urls.length) setGallery({ urls, index }); };
   const moveGallery = (direction: 1 | -1) => setGallery((current) => current ? { ...current, index: (current.index + direction + current.urls.length) % current.urls.length } : current);
-
-  return <main dir="rtl" className="creative-space-page">
-    <header className="creative-space-header"><Link href="/" className="free-sites-back"><ArrowRight size={15} /> العودة للموقع</Link><div className="creative-space-brand"><Sparkles size={17} /> مساحتك للإبداع</div><span className="creative-space-mark">أبو كيان الجنيد</span></header>
-    <section className="creative-space-hero"><span className="studio-label"><span className="free-sites-dot" /> مساحة للظهور</span><h1>شارك فكرتك<br /><em>بشكل يليق بها.</em></h1><p>قدّم مشروعك أو موهبتك أو خدمتك. نراجع المشاركات بعناية قبل عرضها للزوار.</p><a className="creative-space-cta" href="#submit"><Send size={16} /> أضف مشاركتك <ArrowLeft size={15} /></a></section>
-    <section className="creative-space-layout">
-      <form id="submit" className="creative-space-form" onSubmit={submit}><div className="creative-space-form-heading"><span className="studio-label">01 / أرسل مشاركتك</span><h2>عرّف الناس بما تصنع.</h2></div>
-        {sent && <div className="creative-space-success"><Check size={17} /> وصلت مشاركتك وستظهر بعد الموافقة عليها.</div>}
-        <label><span>اسم المشروع أو الخدمة *</span><input value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} maxLength={255} placeholder="مثال: استوديو ورد" /></label>
-        <label><span>التعريف بالمشروع *</span><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={5000} placeholder="اكتب وصفًا مختصرًا وواضحًا..." /></label>
-        <label><span>القسم *</span><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.data?.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label>
-        <label><span>رابط المشروع أو الحساب (اختياري)</span><input type="url" value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://" /></label>
-        <label><span>بيانات التواصل (اختياري)</span><input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} maxLength={500} placeholder="واتساب أو بريد إلكتروني" /></label>
-        <label className="creative-space-upload"><input type="file" accept="image/*" multiple onChange={chooseImages} /><span><ImagePlus size={18} /> أضف صورًا للمشروع</span><small>{images.length ? `${images.length} صور مختارة` : "اختياري · حتى 4 صور"}</small></label>
-        <button className="creative-space-submit" type="submit" disabled={create.isPending}>{create.isPending ? "جارٍ الإرسال..." : "إرسال للمراجعة"} <Send size={15} /></button>
-      </form>
-      <div className="creative-space-library"><div className="creative-space-list-heading"><span className="studio-label">02 / المشاركات المنشورة</span><h2>مساحات صنعتها أفكار جميلة.</h2></div>
-        <div className="creative-category-tabs"><button type="button" className={activeCategory === "all" ? "is-active" : ""} onClick={() => setActiveCategory("all")}>الكل</button>{categories.data?.map((category) => <button type="button" className={activeCategory === category.slug ? "is-active" : ""} key={category.slug} onClick={() => setActiveCategory(category.slug)}>{category.name}</button>)}</div>
-        {submissions.isLoading && <p className="creative-space-empty">جارٍ تحميل المشاركات...</p>}{!submissions.isLoading && !visibleSubmissions.length && <p className="creative-space-empty">ستظهر المشاركات المعتمدة هنا قريبًا.</p>}
-        {visibleSubmissions.map((item) => <article className="creative-space-card" key={item.id}><div className={`creative-space-gallery ${item.imageUrls?.length === 1 ? "is-single" : "is-grid"}`}>{item.imageUrls?.map((url, index) => <button type="button" className="creative-space-image-button" key={url} onClick={() => openGallery(item.imageUrls || [], index)} aria-label={`تكبير صورة ${item.projectName}`}><img src={url} alt={item.projectName} loading="lazy" /></button>)}</div><div className="creative-space-card-body"><span className="creative-space-card-kicker">{categories.data?.find((category) => category.slug === item.category)?.name || "مساحة إبداعية"}</span><h3>{item.projectName}</h3><p>{item.description}</p>{item.contact && <small>{item.contact}</small>}{item.link && <a href={item.link} target="_blank" rel="noreferrer">زيارة المشروع <ExternalLink size={14} /></a>}</div></article>)}
-      </div>
-    </section>
-    {gallery && <div className="creative-gallery-modal" role="dialog" aria-modal="true" aria-label="عارض الصور" onClick={() => setGallery(null)}><button type="button" className="creative-gallery-close" onClick={() => setGallery(null)} aria-label="إغلاق"><X size={20} /></button>{gallery.urls.length > 1 && <button type="button" className="creative-gallery-next creative-gallery-prev" onClick={(event) => { event.stopPropagation(); moveGallery(-1); }} aria-label="الصورة السابقة"><ChevronRight size={25} /></button>}<img src={gallery.urls[gallery.index]} alt="عرض مكبر" onClick={(event) => event.stopPropagation()} />{gallery.urls.length > 1 && <button type="button" className="creative-gallery-next" onClick={(event) => { event.stopPropagation(); moveGallery(1); }} aria-label="الصورة التالية"><ChevronLeft size={25} /></button>}<span className="creative-gallery-count">{gallery.index + 1} / {gallery.urls.length}</span></div>}
-  </main>;
+  const formModal = formOpen && <div className="creative-submit-modal" role="dialog" aria-modal="true" aria-label="إضافة مشروع" onClick={() => setFormOpen(false)}><form id="submit" className="creative-space-form creative-space-form-modal" onSubmit={(event) => { event.stopPropagation(); void submit(event); }} onClick={(event) => event.stopPropagation()}><button type="button" className="creative-modal-close" onClick={() => setFormOpen(false)} aria-label="إغلاق"><X size={20} /></button><div className="creative-space-form-heading"><span className="studio-label">01 / أرسل مشاركتك</span><h2>عرّف الناس بما تصنع.</h2><p>كل الحقول اختيارية. أرسل أي معلومة أو صورة واحدة على الأقل.</p></div>{sent && <div className="creative-space-success"><Check size={17} /> وصلت مشاركتك وستظهر بعد الموافقة عليها.</div>}<label><span>اسم المشروع أو الخدمة (اختياري)</span><input value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} maxLength={255} placeholder="مثال: استوديو ورد" /></label><label><span>التعريف بالمشروع (اختياري)</span><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={5000} placeholder="اكتب وصفًا مختصرًا وواضحًا..." /></label><label><span>القسم (اختياري)</span><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.data?.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label><label><span>رابط المشروع أو الحساب (اختياري)</span><input type="url" value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://" /></label><label><span>بيانات التواصل (اختياري)</span><input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} maxLength={500} placeholder="واتساب أو بريد إلكتروني" /></label><label className="creative-space-upload"><input type="file" accept="image/*" multiple onChange={chooseImages} /><span><ImagePlus size={18} /> أضف صورًا للمشروع</span><small>{images.length ? `${images.length} صور مختارة` : "اختياري · حتى 4 صور"}</small></label><button className="creative-space-submit" type="submit" disabled={create.isPending}>{create.isPending ? "جارٍ الإرسال..." : "إرسال للمراجعة"} <Send size={15} /></button></form></div>;
+  return <main dir="rtl" className="creative-space-page"><header className="creative-space-header"><Link href="/" className="free-sites-back"><ArrowRight size={15} /> العودة للموقع</Link><div className="creative-space-brand"><Sparkles size={17} /> مساحتك للإبداع</div><span className="creative-space-mark">أبو كيان الجنيد</span></header><section className="creative-space-hero"><span className="studio-label"><span className="free-sites-dot" /> مساحة للظهور</span><h1>شارك فكرتك<br /><em>بشكل يليق بها.</em></h1><p>قدّم مشروعك أو موهبتك أو خدمتك. نراجع المشاركات بعناية قبل عرضها للزوار.</p><button type="button" className="creative-space-cta" onClick={() => setFormOpen(true)}><Send size={16} /> أضف مشروعك <ArrowLeft size={15} /></button>{sent && <div className="creative-space-success creative-space-success-inline"><Check size={17} /> وصلت مشاركتك وستظهر بعد الموافقة عليها.</div>}</section><section className="creative-space-layout"><div className="creative-space-library"><div className="creative-space-list-heading"><span className="studio-label">01 / المشاركات المنشورة</span><h2>مساحات صنعتها أفكار جميلة.</h2></div><div className="creative-category-tabs"><button type="button" className={activeCategory === "all" ? "is-active" : ""} onClick={() => setActiveCategory("all")}>الكل</button>{categories.data?.map((category) => <button type="button" className={activeCategory === category.slug ? "is-active" : ""} key={category.slug} onClick={() => setActiveCategory(category.slug)}>{category.name}</button>)}</div>{submissions.isLoading && <p className="creative-space-empty">جارٍ تحميل المشاركات...</p>}{!submissions.isLoading && !visibleSubmissions.length && <p className="creative-space-empty">ستظهر المشاركات المعتمدة هنا قريبًا.</p>}{visibleSubmissions.map((item) => { const title = item.projectName || "مشاركة إبداعية"; return <article className="creative-space-card" key={item.id}>{item.imageUrls?.length ? <div className={`creative-space-gallery ${item.imageUrls.length === 1 ? "is-single" : "is-grid"}`}>{item.imageUrls.map((url, index) => <button type="button" className="creative-space-image-button" key={url} onClick={() => openGallery(item.imageUrls || [], index)} aria-label={`تكبير صورة ${title}`}><img src={url} alt={title} loading="lazy" /></button>)}</div> : null}<div className="creative-space-card-body"><span className="creative-space-card-kicker">{categories.data?.find((category) => category.slug === item.category)?.name || "مساحة إبداعية"}</span><h3>{title}</h3>{item.description && <p>{item.description}</p>}{item.contact && <small>{item.contact}</small>}{item.link && <a href={item.link} target="_blank" rel="noreferrer">زيارة المشروع <ExternalLink size={14} /></a>}</div></article>; })}</div></section>{formModal}{gallery && <div className="creative-gallery-modal" role="dialog" aria-modal="true" aria-label="عارض الصور" onClick={() => setGallery(null)}><button type="button" className="creative-gallery-close" onClick={() => setGallery(null)} aria-label="إغلاق"><X size={20} /></button>{gallery.urls.length > 1 && <button type="button" className="creative-gallery-next creative-gallery-prev" onClick={(event) => { event.stopPropagation(); moveGallery(-1); }} aria-label="الصورة السابقة"><ChevronRight size={25} /></button>}<img src={gallery.urls[gallery.index]} alt="عرض مكبر" onClick={(event) => event.stopPropagation()} />{gallery.urls.length > 1 && <button type="button" className="creative-gallery-next" onClick={(event) => { event.stopPropagation(); moveGallery(1); }} aria-label="الصورة التالية"><ChevronLeft size={25} /></button>}<span className="creative-gallery-count">{gallery.index + 1} / {gallery.urls.length}</span></div>}</main>;
 }

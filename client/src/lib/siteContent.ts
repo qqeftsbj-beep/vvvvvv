@@ -9,6 +9,8 @@ export type EditableService = {
   description: string;
   tag: string;
   image?: string;
+  visible?: boolean;
+  order?: number;
 };
 
 export type EditableProduct = {
@@ -95,9 +97,9 @@ export const defaultSiteContent: SiteContent = {
   primaryButton: "احكِ لنا عن فكرتك",
   secondaryButton: "شاهد الأعمال",
   services: [
-    { number: "01", title: "تصاميم المناسبات", description: "بطاقات تهنئة للأعراس والتخرج والحفلات تُبنى حول اسمك، لونك، واللحظة التي تريد أن تبقى.", tag: "تصميم AI + إخراج بصري" },
-    { number: "02", title: "الإعلانات الممولة", description: "حملة فيسبوك أوضح: رسالة مفهومة، جمهور أدق، ومحتوى يفتح باب التواصل بدل أن يمر مرورًا عابرًا.", tag: "استراتيجية + إدارة" },
-    { number: "03", title: "المواقع وصفحات الهبوط", description: "نحوّل فكرتك إلى واجهة مرتبة، سريعة، ومتجاوبة تساعد العميل على فهمك واتخاذ الخطوة التالية.", tag: "ويب + تجربة مستخدم" },
+    { number: "01", order: 1, visible: true, title: "تصاميم المناسبات", description: "بطاقات تهنئة للأعراس والتخرج والحفلات تُبنى حول اسمك، لونك، واللحظة التي تريد أن تبقى.", tag: "تصميم AI + إخراج بصري" },
+    { number: "02", order: 2, visible: true, title: "الإعلانات الممولة", description: "حملة فيسبوك أوضح: رسالة مفهومة، جمهور أدق، ومحتوى يفتح باب التواصل بدل أن يمر مرورًا عابرًا.", tag: "استراتيجية + إدارة" },
+    { number: "03", order: 3, visible: true, title: "المواقع وصفحات الهبوط", description: "نحوّل فكرتك إلى واجهة مرتبة، سريعة، ومتجاوبة تساعد العميل على فهمك واتخاذ الخطوة التالية.", tag: "ويب + تجربة مستخدم" },
   ],
   products: [],
   buttons: [],

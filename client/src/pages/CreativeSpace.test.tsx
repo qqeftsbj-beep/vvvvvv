@@ -18,11 +18,12 @@ describe("CreativeSpace public submissions", () => {
   it("shows approved cards and submits required project details without empty optional blocks", async () => {
     render(<CreativeSpace />);
     expect(screen.getByRole("heading", { name: "مشروع جميل" })).toBeTruthy();
-    expect(screen.getByText("بيانات التواصل (اختياري)")).toBeTruthy();
-    fireEvent.change(screen.getByPlaceholderText("مثال: استوديو ورد"), { target: { value: "مشروعي" } });
+    expect(screen.queryByText("بيانات التواصل (اختياري)")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /أضف مشروعك/ }));
+    expect(screen.getByRole("dialog", { name: "إضافة مشروع" })).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText("اكتب وصفًا مختصرًا وواضحًا..."), { target: { value: "تعريف مختصر" } });
     fireEvent.click(screen.getByRole("button", { name: /إرسال للمراجعة/ }));
-    await waitFor(() => expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ projectName: "مشروعي", description: "تعريف مختصر", imageData: [] })));
+    await waitFor(() => expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ projectName: "", description: "تعريف مختصر", imageData: [] })));
   });
 
   it("opens a multi-image grid in a navigable full-size gallery", () => {

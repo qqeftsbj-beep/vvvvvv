@@ -419,7 +419,7 @@ export default function Home() {
         </div>
 
         <div className="services-list service-cards-grid">
-          {content.services.map((service, index) => {
+          {content.services.filter((service) => service.visible !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((service, index) => {
             const Icon = [Sparkles, Megaphone, LayoutTemplate][index % 3];
             const serviceImage = service.image || portfolio[index % portfolio.length]?.image;
             return (

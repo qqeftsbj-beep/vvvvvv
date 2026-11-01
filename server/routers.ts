@@ -93,18 +93,22 @@ export const appRouter = router({
     create: ownerProcedure.input(z.object({ name: z.string().trim().min(1).max(120), slug: z.string().trim().min(1).max(120), sortOrder: z.number().int().min(0).default(0), isVisible: z.boolean().default(true) })).mutation(({ input }) => createCreativeCategory({ ...input, isVisible: input.isVisible ? 1 : 0 })),
     update: ownerProcedure.input(z.object({ id: z.number(), name: z.string().trim().min(1).max(120).optional(), slug: z.string().trim().min(1).max(120).optional(), sortOrder: z.number().int().min(0).optional(), isVisible: z.boolean().optional() })).mutation(({ input }) => { const { id, isVisible, ...rest } = input; return updateCreativeCategory(id, { ...rest, ...(isVisible === undefined ? {} : { isVisible: isVisible ? 1 : 0 }) }); }),
     remove: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteCreativeCategory(input.id)),
+    createWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), name: z.string().trim().min(1).max(120), slug: z.string().trim().min(1).max(120), sortOrder: z.number().int().min(0).default(0), isVisible: z.boolean().default(true) })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); const { ownerPin: _ownerPin, ...category } = input; return createCreativeCategory({ ...category, isVisible: category.isVisible ? 1 : 0 }); }),
+    updateWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number(), name: z.string().trim().min(1).max(120).optional(), slug: z.string().trim().min(1).max(120).optional(), sortOrder: z.number().int().min(0).optional(), isVisible: z.boolean().optional() })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); const { ownerPin: _ownerPin, id, isVisible, ...rest } = input; return updateCreativeCategory(id, { ...rest, ...(isVisible === undefined ? {} : { isVisible: isVisible ? 1 : 0 }) }); }),
+    removeWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number() })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); return deleteCreativeCategory(input.id); }),
   }),
   creativeSpace: router({
     list: publicProcedure.query(() => listApprovedCreativeSubmissions()),
     adminList: ownerProcedure.query(() => listAllCreativeSubmissions()),
     create: publicProcedure.input(z.object({
-      projectName: z.string().trim().min(1).max(255),
-      description: z.string().trim().min(1).max(5000),
+      projectName: z.string().trim().max(255).default(""),
+      description: z.string().trim().max(5000).default(""),
       category: z.string().trim().min(1).max(120).default("other"),
-      link: z.string().trim().max(2000).optional(),
-      contact: z.string().trim().max(500).optional(),
+      link: z.string().trim().max(2000).default(""),
+      contact: z.string().trim().max(500).default(""),
       imageData: z.array(z.string().min(1)).max(4).default([]),
     })).mutation(async ({ input }) => {
+      if (!input.projectName && !input.description && !input.link && !input.contact && input.imageData.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "أضف صورة أو وصفًا أو رابطًا واحدًا على الأقل." });
       const urls: string[] = [];
       const keys: string[] = [];
       for (let index = 0; index < input.imageData.length; index += 1) {
@@ -113,7 +117,7 @@ export const appRouter = router({
         const uploaded = await storagePut(`creative-space/${Date.now()}-${index}-${siteFileName(input.projectName)}`, decoded.buffer, decoded.contentType);
         urls.push(uploaded.url); keys.push(uploaded.key);
       }
-      return createCreativeSubmission({ projectName: input.projectName, description: input.description, category: input.category, link: input.link || null, contact: input.contact || null, imageUrls: JSON.stringify(urls), imageKeys: JSON.stringify(keys), status: "pending", isVisible: 0, sortOrder: 0 });
+      return createCreativeSubmission({ projectName: input.projectName || null, description: input.description || null, category: input.category, link: input.link || null, contact: input.contact || null, imageUrls: JSON.stringify(urls), imageKeys: JSON.stringify(keys), status: "pending", isVisible: 0, sortOrder: 0 });
     }),
     update: ownerProcedure.input(z.object({
       id: z.number(), projectName: z.string().trim().min(1).max(255).optional(), description: z.string().trim().min(1).max(5000).optional(), category: z.string().trim().min(1).max(120).optional(), link: z.string().trim().max(2000).optional(), contact: z.string().trim().max(500).optional(), status: z.enum(["pending", "approved", "rejected"]).optional(), isVisible: z.boolean().optional(), sortOrder: z.number().int().min(0).optional(),
