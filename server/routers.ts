@@ -95,6 +95,7 @@ export const appRouter = router({
     remove: ownerProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteCreativeCategory(input.id)),
     createWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), name: z.string().trim().min(1).max(120), slug: z.string().trim().min(1).max(120), sortOrder: z.number().int().min(0).default(0), isVisible: z.boolean().default(true) })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); const { ownerPin: _ownerPin, ...category } = input; return createCreativeCategory({ ...category, isVisible: category.isVisible ? 1 : 0 }); }),
     updateWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number(), name: z.string().trim().min(1).max(120).optional(), slug: z.string().trim().min(1).max(120).optional(), sortOrder: z.number().int().min(0).optional(), isVisible: z.boolean().optional() })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); const { ownerPin: _ownerPin, id, isVisible, ...rest } = input; return updateCreativeCategory(id, { ...rest, ...(isVisible === undefined ? {} : { isVisible: isVisible ? 1 : 0 }) }); }),
+    reorderWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), ids: z.array(z.number()).max(200) })).mutation(async ({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); await Promise.all(input.ids.map((id, index) => updateCreativeCategory(id, { sortOrder: index + 1 }))); return listCreativeCategories(true); }),
     removeWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number() })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); return deleteCreativeCategory(input.id); }),
   }),
   creativeSpace: router({
@@ -102,8 +103,8 @@ export const appRouter = router({
     adminList: ownerProcedure.query(() => listAllCreativeSubmissions()),
     create: publicProcedure.input(z.object({
       projectName: z.string().trim().max(255).default(""),
-      description: z.string().trim().max(5000).default(""),
-      category: z.string().trim().min(1).max(120).default("other"),
+      description: z.string().trim().min(1, "تعريف المشروع مطلوب.").max(5000),
+      category: z.string().trim().min(1, "اختيار القسم مطلوب.").max(120),
       link: z.string().trim().max(2000).default(""),
       contact: z.string().trim().max(500).default(""),
       imageData: z.array(z.string().min(1)).max(4).default([]),

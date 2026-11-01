@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React, { type ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mutate = vi.fn();
 vi.mock("@/lib/trpc", () => ({
@@ -15,15 +15,33 @@ import CreativeSpace from "./CreativeSpace";
 
 describe("CreativeSpace public submissions", () => {
   afterEach(() => cleanup());
-  it("shows approved cards and submits required project details without empty optional blocks", async () => {
+  beforeEach(() => mutate.mockClear());
+  it("shows approved cards and requires both description and category", async () => {
     render(<CreativeSpace />);
     expect(screen.getByRole("heading", { name: "مشروع جميل" })).toBeTruthy();
     expect(screen.queryByText("بيانات التواصل (اختياري)")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /أضف مشروعك/ }));
     expect(screen.getByRole("dialog", { name: "إضافة مشروع" })).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText("اكتب وصفًا مختصرًا وواضحًا..."), { target: { value: "تعريف مختصر" } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "graphic-design" } });
     fireEvent.click(screen.getByRole("button", { name: /إرسال للمراجعة/ }));
-    await waitFor(() => expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ projectName: "", description: "تعريف مختصر", imageData: [] })));
+    await waitFor(() => expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ projectName: "", description: "تعريف مختصر", category: "graphic-design", imageData: [] })));
+  });
+
+  it("updates the live preview while the visitor fills the form", () => {
+    render(<CreativeSpace />);
+    fireEvent.click(screen.getByRole("button", { name: /أضف مشروعك/ }));
+    fireEvent.change(screen.getByPlaceholderText("مثال: استوديو ورد"), { target: { value: "استوديو المعاينة" } });
+    fireEvent.change(screen.getByPlaceholderText("اكتب وصفًا مختصرًا وواضحًا..."), { target: { value: "وصف يظهر فورًا" } });
+    expect(screen.getByText("استوديو المعاينة")).toBeTruthy();
+    expect(screen.getAllByText("وصف يظهر فورًا")).toHaveLength(2);
+  });
+
+  it("does not submit when the mandatory description or category is missing", () => {
+    render(<CreativeSpace />);
+    fireEvent.click(screen.getByRole("button", { name: /أضف مشروعك/ }));
+    fireEvent.click(screen.getByRole("button", { name: /إرسال للمراجعة/ }));
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("opens a multi-image grid in a navigable full-size gallery", () => {
