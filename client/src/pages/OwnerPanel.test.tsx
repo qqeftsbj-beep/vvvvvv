@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import React, { type ReactNode } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     siteContent: { get: { useQuery: () => ({ data: null, isLoading: false }) }, save: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) } },
+    ownerSearch: { query: { useQuery: () => ({ data: { items: [], hasMore: false }, isLoading: false }) } },
     templates: {
       recycleBin: { useQuery: () => ({ data: null, isLoading: false }) }, retentionDays: { useQuery: () => ({ data: null, isLoading: false }) },
       restore: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) }, purge: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
@@ -39,5 +40,13 @@ describe("OwnerPanel organization", () => {
     expect(sections).toHaveLength(10);
     expect(sections[0].hasAttribute("open")).toBe(true);
     expect(sections.slice(1).every((section) => !section.hasAttribute("open"))).toBe(true);
+  });
+
+  it("shows unsaved state after editing and exposes the global search field", () => {
+    render(<OwnerPanel />);
+    expect(screen.getByRole("textbox", { name: "البحث الشامل" })).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue("نخلي فكرتك"), { target: { value: "عنوان جديد" } });
+    expect(screen.getByText("لديك تعديلات غير محفوظة")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /حفظ التعديلات/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

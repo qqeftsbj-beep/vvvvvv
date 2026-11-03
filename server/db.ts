@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { CreativeCategory, CreativeSubmission, FreeSite, InsertCreativeCategory, InsertCreativeSubmission, InsertFreeSite, InsertSharedTemplate, InsertUser, creativeCategories, creativeSubmissions, freeSites, sharedTemplates, siteSettings, templateSettings, User, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -249,4 +249,27 @@ export async function deleteCreativeCategory(id: number) {
   if (!db) throw new Error("Database unavailable");
   await db.delete(creativeCategories).where(eq(creativeCategories.id, id));
   return { success: true } as const;
+}
+
+
+export type OwnerSearchResult = { kind: "template" | "free-site" | "submission" | "category"; id: number; title: string; subtitle: string; section: "templates" | "free-sites" | "creative" | "categories"; url?: string };
+export async function searchOwnerContent(term: string, page = 1, pageSize = 20) {
+  const db = await getDb();
+  if (!db) return { items: [] as OwnerSearchResult[], hasMore: false };
+  const clean = term.trim().slice(0, 120);
+  if (clean.length < 2) return { items: [] as OwnerSearchResult[], hasMore: false };
+  const pattern = `%${clean}%`; const safePage = Math.max(1, Math.floor(page)); const safeSize = Math.max(5, Math.min(50, Math.floor(pageSize))); const offset = (safePage - 1) * safeSize;
+  const [templateRows, siteRows, submissionRows, categoryRows] = await Promise.all([
+    db.select().from(sharedTemplates).where(and(isNull(sharedTemplates.deletedAt), or(like(sharedTemplates.text, pattern), like(sharedTemplates.imageName, pattern), like(sharedTemplates.tool, pattern)))).orderBy(desc(sharedTemplates.createdAt)).limit(safeSize + 1).offset(offset),
+    db.select().from(freeSites).where(or(like(freeSites.name, pattern), like(freeSites.url, pattern), like(freeSites.description, pattern), like(freeSites.additionalText, pattern))).orderBy(desc(freeSites.createdAt)).limit(safeSize + 1).offset(offset),
+    db.select().from(creativeSubmissions).where(or(like(creativeSubmissions.projectName, pattern), like(creativeSubmissions.description, pattern), like(creativeSubmissions.category, pattern), like(creativeSubmissions.link, pattern), like(creativeSubmissions.contact, pattern))).orderBy(desc(creativeSubmissions.createdAt)).limit(safeSize + 1).offset(offset),
+    db.select().from(creativeCategories).where(or(like(creativeCategories.name, pattern), like(creativeCategories.slug, pattern))).orderBy(asc(creativeCategories.sortOrder)).limit(safeSize + 1).offset(offset),
+  ]);
+  const items: OwnerSearchResult[] = [
+    ...templateRows.slice(0, safeSize).map((row) => ({ kind: "template" as const, id: row.id, title: row.imageName, subtitle: `${row.tool} · ${row.text.slice(0, 100)}`, section: "templates" as const, url: `/templates/${row.tool === "Gemini" ? "gemini" : "chat-gbt"}?template=${row.id}` })),
+    ...siteRows.slice(0, safeSize).map((row) => ({ kind: "free-site" as const, id: row.id, title: row.name, subtitle: row.description || row.url || "موقع مجاني", section: "free-sites" as const })),
+    ...submissionRows.slice(0, safeSize).map((row) => ({ kind: "submission" as const, id: row.id, title: row.projectName || "مشاركة إبداعية", subtitle: row.description || row.category, section: "creative" as const })),
+    ...categoryRows.slice(0, safeSize).map((row) => ({ kind: "category" as const, id: row.id, title: row.name, subtitle: row.slug, section: "categories" as const })),
+  ];
+  return { items, hasMore: templateRows.length > safeSize || siteRows.length > safeSize || submissionRows.length > safeSize || categoryRows.length > safeSize };
 }

@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
-import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, createCreativeCategory, updateCreativeCategory, deleteCreativeCategory } from "./db";
+import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, createCreativeCategory, updateCreativeCategory, deleteCreativeCategory, searchOwnerContent } from "./db";
 import { storagePut } from "./storage";
 
 const toolSchema = z.enum(["Gemini", "Chat GBT"]);
@@ -86,6 +86,9 @@ export const appRouter = router({
       if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
       return saveSiteContent(JSON.stringify(input.content));
     }),
+  }),
+  ownerSearch: router({
+    query: ownerProcedure.input(z.object({ term: z.string().max(120), page: z.number().int().min(1).default(1), pageSize: z.number().int().min(5).max(50).default(20) })).query(({ input }) => searchOwnerContent(input.term, input.page, input.pageSize)),
   }),
   creativeCategories: router({
     list: publicProcedure.query(() => listCreativeCategories(false)),
