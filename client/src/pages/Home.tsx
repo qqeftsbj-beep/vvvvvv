@@ -31,6 +31,8 @@ import {
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { EditableButton, SiteContent, loadSiteContent, normalizeSiteContent, saveSiteContent } from "@/lib/siteContent";
+import { buttonDestination } from "@/lib/buttonRouting";
+import "./managedButtons.css";
 import { useTheme } from "@/contexts/ThemeContext";
 import ChatAssistant from "@/components/ChatAssistant";
 import { trpc } from "@/lib/trpc";
@@ -120,7 +122,7 @@ export default function Home() {
   const [, navigate] = useLocation();
   const geminiTemplates = trpc.templates.list.useQuery({ tool: "Gemini" }, { staleTime: 30_000 });
   const chatTemplates = trpc.templates.list.useQuery({ tool: "Chat GBT" }, { staleTime: 30_000 });
-  const remoteContent = trpc.siteContent.get.useQuery(undefined, { staleTime: 0, refetchInterval: 10_000, refetchOnWindowFocus: true });
+  const remoteContent = trpc.siteContent.get.useQuery(undefined, { staleTime: 0, refetchInterval: 5_000, refetchOnWindowFocus: true });
 
   useEffect(() => {
     const syncContent = () => setContent(loadSiteContent());
@@ -191,18 +193,13 @@ export default function Home() {
   }, [chatTemplates.data, content, geminiTemplates.data, navigate, searchTerm]);
 
   const handleCustomButton = (button: EditableButton) => {
-    if (button.action === "external" && button.url) {
-      window.open(button.url, "_blank", "noopener,noreferrer");
-      return;
-    }
-    if (button.action === "gemini") return navigate("/templates/gemini");
-    if (button.action === "chat-gbt") return navigate("/templates/chat-gbt");
-    if (button.action === "free-sites") return navigate("/free-sites");
-    if (button.action === "creative-space") return navigate("/creative-space");
-    if (button.action === "custom-page" && button.url) return navigate(button.url);
-    if (button.action === "services") return handleNav("services");
-    if (button.action === "work") return handleNav("work");
-    handleNav("contact");
+    const destination = buttonDestination(button);
+    if (!destination) return toast.error("هذا الزر يحتاج إلى وجهة صحيحة في لوحة المالك.");
+    setMenuOpen(false);
+    if (destination.target === "_blank") { window.open(destination.url.startsWith("#") ? `/${destination.url}` : destination.url, "_blank", "noopener,noreferrer"); return; }
+    if (destination.url.startsWith("#")) return handleNav(destination.url.slice(1));
+    if (destination.url.startsWith("/")) return navigate(destination.url);
+    window.location.assign(destination.url);
   };
 
   const handlePlaceholder = (label: string) => {
@@ -245,7 +242,7 @@ export default function Home() {
     ...(content.settings.backgroundImage ? { backgroundImage: `linear-gradient(${lightMode ? "rgba(246,241,232,.84), rgba(246,241,232,.92)" : "rgba(8,11,17,.84), rgba(8,11,17,.92)"}), url(${content.settings.backgroundImage})` } : {}),
   } as CSSProperties;
   const customButtons = (placement: EditableButton["placement"]) => content.buttons.filter((button) => button.placement === placement && button.visible !== false).sort((a, b) => (a.order || 0) - (b.order || 0));
-  const customButtonStyle = (button: EditableButton) => ({ backgroundColor: button.backgroundColor || undefined, color: button.textColor || undefined, borderColor: button.borderColor || undefined, borderRadius: `${button.radius ?? content.settings.buttonRadius}px`, fontSize: button.fontSize ? `${button.fontSize}px` : undefined });
+  const customButtonStyle = (button: EditableButton): CSSProperties => ({ backgroundColor: button.backgroundColor || undefined, color: button.textColor || undefined, borderColor: button.borderColor || undefined, borderRadius: `${button.radius ?? content.settings.buttonRadius}px`, fontSize: button.fontSize ? `${button.fontSize}px` : undefined, ...(button.size ? { minHeight: button.size === "small" ? "38px" : button.size === "large" ? "54px" : "44px", paddingBlock: button.size === "small" ? "6px" : button.size === "large" ? "14px" : "10px" } : {}) });
   const buttonIcon = (button: EditableButton) => button.icon === "globe" ? <Globe2 size={16} /> : button.icon === "message" ? <MessageCircle size={16} /> : button.icon === "arrow" ? <ArrowLeft size={16} /> : <Sparkles size={16} />;
   return (
     <main dir="rtl" className={`site-shell ${lightMode ? "site-light" : ""}`} style={dynamicStyle}>
@@ -287,7 +284,7 @@ export default function Home() {
             <span className="location-note">صنعاء · عدن · أونلاين</span>
             <button type="button" className="theme-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="البحث في الموقع" title="بحث"><Search size={15} /></button>
             <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={lightMode ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"} title={lightMode ? "الوضع الداكن" : "الوضع الفاتح"}>{lightMode ? <Moon size={15} /> : <Sun size={15} />}</button>
-            {customButtons("header").map((button) => <button key={button.id} type="button" className="header-admin custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}</button>)}
+            {customButtons("header").map((button) => <button key={button.id} type="button" className="header-admin custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{buttonIcon(button)} {button.label}</button>)}
             <Link href="/owner" className="header-admin"><LockKeyhole size={13} /> لوحة التحكم</Link>
             <button
               type="button"
@@ -448,7 +445,7 @@ export default function Home() {
             );
           })}
         </div>
-        {customButtons("services").length > 0 && <div className="custom-section-actions">{customButtons("services").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
+        {customButtons("services").length > 0 && <div className="custom-section-actions">{customButtons("services").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{buttonIcon(button)} {button.label}<ArrowLeft size={14} /></button>)}</div>}
       </section>
 
       {content.products.length > 0 && <section id="products" className="section products-section" data-reveal><span className="section-ghost" aria-hidden="true">04</span><div className="section-intro"><span className="section-index">/ 04</span><div><div className="eyebrow">منتجات وخدمات جاهزة</div><h2>أشياء صُممت<br /><em>لتُطلب الآن.</em></h2></div><p>أضف منتجاتك أو باقاتك من لوحة التحكم، واجعلها ظاهرة في واجهة الموقع بشكل واضح.</p></div><div className="product-grid">{content.products.map((product) => <article className="product-card" key={product.id}>{product.image && <img src={product.image} alt="" loading="lazy" />}<div><h3>{product.title}</h3><p>{product.description}</p><strong>{product.price}</strong></div></article>)}</div></section>}
@@ -563,7 +560,7 @@ export default function Home() {
             <p>أرسل لنا نوع الخدمة وفكرتك في رسالة، ونرتب معك الباقي.</p>
           </div>
           <div className="contact-actions">
-            {customButtons("contact").map((button) => <button key={button.id} type="button" className="contact-button custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}
+            {customButtons("contact").map((button) => <button key={button.id} type="button" className="contact-button custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{buttonIcon(button)} {button.label}<ArrowLeft size={14} /></button>)}
             <a className="contact-button" href={whatsappChannel} target="_blank" rel="noreferrer">
               <MessageCircle size={19} /> تواصل عبر واتساب <ArrowLeft size={17} />
             </a>

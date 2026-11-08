@@ -15,7 +15,7 @@ vi.mock("@/lib/trpc", () => ({
       remove: { useMutation: () => ({ mutate, isPending: false }) },
     },
     templateCategories: {
-      list: { useQuery: () => ({ data: [{ id: 1, tool: "Gemini", name: "الأعراس والمناسبات", slug: "gemini-weddings", sortOrder: 1, isVisible: 1 }], isLoading: false }) },
+      list: { useQuery: () => ({ data: [{ id: 1, tool: "Gemini", name: "الأعراس والمناسبات", slug: "gemini-weddings", sortOrder: 1, isVisible: 1 }, { id: 2, tool: "Gemini", name: "تهاني العيد الطويلة", slug: "gemini-eid", sortOrder: 2, isVisible: 1 }], isLoading: false }) },
     },
     useUtils: () => ({ templates: { list: { invalidate: vi.fn() } }, templateCategories: { list: { invalidate: vi.fn() } } }),
   },
@@ -98,5 +98,20 @@ describe("TemplateStudio interactive flow", () => {
     await waitFor(() => expect(screen.queryByDisplayValue("تعديل سريع")).toBeNull());
     expect(mutate.mock.calls.at(-1)?.[0]).toMatchObject({ id: 8, text: "تعديل سريع" });
     expect(mutate.mock.calls.at(-1)?.[0]).not.toHaveProperty("mediaData");
+  });
+
+  it("keeps the add action reachable after switching categories and still gates the creator with a password", () => {
+    render(<TemplateStudio toolName="Gemini" toolLabel="Gemini" />);
+
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(3);
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "تهاني العيد الطويلة" }));
+    expect(screen.getByRole("tab", { name: "تهاني العيد الطويلة" }).getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "إضافة قالب جديد" }));
+    expect(screen.getByRole("dialog", { name: "قالب جديد" })).toBeTruthy();
+    expect(screen.getByLabelText("كلمة مرور القوالب")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull();
   });
 });

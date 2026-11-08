@@ -27,6 +27,8 @@ import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { loadSiteContent } from "@/lib/siteContent";
 import { useTheme } from "@/contexts/ThemeContext";
+import CategoryStrip from "@/components/CategoryStrip";
+import "./TemplateStudio.css";
 
 type MediaType = "image" | "video";
 
@@ -148,6 +150,11 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   }, [draftCategory, visibleCategories]);
 
   useEffect(() => {
+    if (selectedCategory === "all" || visibleCategories.some((category) => category.slug === selectedCategory)) return;
+    setSelectedCategory("all");
+  }, [selectedCategory, visibleCategories]);
+
+  useEffect(() => {
     const sharedId = new URLSearchParams(window.location.search).get("template");
     if (!sharedId || !templates.some((template) => template.id === sharedId)) return;
     setActiveId(sharedId);
@@ -212,6 +219,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
     if (!isOwner) return toast("اضغط إضافة قالب جديد وأدخل كلمة المرور أولًا.");
     if (!mediaData || !text.trim()) return toast.error("أضف صورة أو فيديو ونصًا قبل الحفظ.");
+    if (!draftCategory.trim()) return toast.error("اختر قسم التصميم قبل الحفظ.");
     const payload = { tool: toolName, category: draftCategory, text: text.trim(), mediaType, mediaData, imageName: mediaName || `abu-kayan-${mediaType}`, ownerPassword: templatePassword };
     if (activeTemplate?.serverId) {
       // Existing templates use a storage URL. Upload only when a new local file was selected.
@@ -325,9 +333,10 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     <div className="studio-orbit studio-orbit-one" aria-hidden="true" /><div className="studio-orbit studio-orbit-two" aria-hidden="true" />
     <header className="studio-header"><Link href="/" className="studio-back"><ArrowRight size={17} /> العودة للموقع</Link><div className="studio-header-actions"><button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><div className="studio-brand"><Sparkles size={17} /> أبو كيان الجنيد</div></div></header>
     <section className="studio-hero"><div className="studio-kicker"><span /> مساحة {toolLabel}</div><h1>مكتبة تصاميم<br /><em>تتوسع معك.</em></h1><p>تصفح القوالب المنشورة، وانسخ النص أو حمّل الملف من البطاقة. لإضافة قالب جديد استخدم الزر العلوي وأدخل كلمة المرور.</p><div className="studio-steps"><span><b>01</b> إضافة</span><i /><span><b>02</b> صورة أو فيديو</span><i /><span><b>03</b> نشر</span></div></section>
+    <div className="studio-create-toolbar" aria-label="أدوات القوالب"><div><span className="studio-label">مساحة الإنشاء</span><strong>أضف تصميمًا جديدًا من أي مكان.</strong></div><button type="button" className="studio-primary-button" onClick={openCreator}><Plus size={16} /> إضافة قالب جديد</button></div>
     <section className={`studio-layout ${editorVisible ? "has-editor" : "library-only"}`}>
       {editorVisible && <div className="studio-editor-panel" role="dialog" aria-modal="true" aria-labelledby="template-editor-title">
-        <div className="studio-panel-top"><div><span className="studio-label">المحرر الخاص بالمالك</span><h2 id="template-editor-title">{activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"}</h2></div><div className="studio-panel-actions"><button type="button" className="studio-ghost-button" onClick={openCreator}><Plus size={16} /> قالب جديد</button><button type="button" className="studio-close-button" onClick={() => { setEditorVisible(false); resetEditor(); }} aria-label="إغلاق محرر القالب">×</button></div></div>
+        <div className="studio-panel-top"><div><span className="studio-label">المحرر الخاص بالمالك</span><h2 id="template-editor-title">{activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"}</h2></div><div className="studio-panel-actions"><button type="button" className="studio-close-button" onClick={() => { setEditorVisible(false); resetEditor(); }} aria-label="إغلاق محرر القالب">×</button></div></div>
         <div className={`owner-control ${isOwner ? "is-unlocked" : ""}`}>
           {isOwner ? <><span><Check size={15} /> وضع المالك مفتوح</span>{!authLoading && !isAuthenticated && <button type="button" onClick={startLogin}>تسجيل دخول المالك</button>}<button type="button" onClick={lockOwner}>إغلاق المحرر</button></> : <><span>أدخل كلمة المرور لفتح الإضافة</span><div><input type="password" inputMode="numeric" maxLength={32} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="كلمة مرور القوالب" aria-label="كلمة مرور القوالب" /><button type="button" onClick={unlockOwner}>فتح الإضافة</button></div></>}
         </div>
@@ -335,7 +344,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
           <label className="upload-zone"><input ref={uploadInputRef} type="file" accept="image/*,video/*" onChange={handleMedia} /><span className="upload-empty"><ImagePlus size={28} /><strong>{mediaData ? "تغيير الصورة أو الفيديو" : "ارفع صورة أو فيديو"}</strong><small>الصورة أو الفيديو سيظهران مع النص في بطاقة واحدة.</small><span className="upload-chip"><Upload size={14} /> اختيار ملف</span></span></label>
           {mediaName && <div className="file-name">{mediaName} · {mediaType === "video" ? "فيديو" : "صورة"}</div>}
           <label className="studio-field"><span>النص أسفل الوسيط</span><textarea value={text} maxLength={MAX_TEXT_LENGTH} onChange={(event) => setText(event.target.value)} placeholder="اكتب التهنئة أو النص الذي تريد الاحتفاظ به..." /><small>{text.length.toLocaleString("ar-EG")} / 10,000</small></label>
-          <label className="studio-field"><span>قسم التصميم</span><select aria-label="قسم التصميم" value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{visibleCategories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select><small>اختر القسم الذي سيظهر فيه التصميم للزوار.</small></label>
+          <label className="studio-field"><span>قسم التصميم</span><select required aria-required="true" aria-label="قسم التصميم" value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{activeTemplate && !visibleCategories.some((category) => category.slug === activeTemplate.category) && <option value={activeTemplate.category}>{categoryNames.get(activeTemplate.category) || activeTemplate.category}</option>}{!visibleCategories.length && <option value="other">أخرى</option>}{visibleCategories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select><small>اختر القسم الذي سيظهر فيه التصميم للزوار.</small></label>
           <div className="template-card-preview"><div className="template-card-image">{mediaData ? renderMedia(mediaData, mediaType) : <ImagePlus size={28} />}</div><p>{text || "سيظهر النص هنا تحت الصورة أو الفيديو"}</p><span>أبو كيان الجنيد · {toolName}</span></div>
           <div className="studio-action-row"><button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ ونشر القالب"}</button><button type="button" className="studio-outline-button" onClick={() => copyValue(text, "draft")}>{copiedId === "draft" ? <Check size={16} /> : <Clipboard size={16} />} {copiedId === "draft" ? "تم النسخ" : "نسخ النص"}</button><button type="button" className="studio-outline-button" onClick={downloadEditor}><Download size={16} /> تحميل</button></div>
         </>}
@@ -343,9 +352,8 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       <aside className="studio-library">
         <div className="studio-library-head">
           <div><span className="studio-label">المكتبة السابقة · الأحدث أولًا</span><h2>القوالب المشتركة <b>{visibleTemplateItems.length}</b></h2></div>
-          <button type="button" className="studio-primary-button studio-new-template" onClick={openCreator}><Plus size={16} /> إضافة قالب جديد</button>
         </div>
-        <div className="template-category-tabs" role="tablist" aria-label="أقسام التصاميم"><button type="button" className={selectedCategory === "all" ? "is-active" : ""} onClick={() => setSelectedCategory("all")}>الكل</button>{visibleCategories.map((category) => <button type="button" key={category.slug} className={selectedCategory === category.slug ? "is-active" : ""} onClick={() => setSelectedCategory(category.slug)}>{category.name}</button>)}</div>
+        <CategoryStrip categories={visibleCategories} value={selectedCategory} onChange={setSelectedCategory} ariaLabel="أقسام التصاميم" className="template-category-strip" />
         {visibleTemplateItems.length === 0 ? <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة في هذا القسم بعد.<br />اضغط «إضافة قالب جديد» للبدء.</p></div> : <div className="library-list">
           {visibleTemplateItems.map((template, index) => {
             const isExpanded = expandedTextIds.includes(template.id);

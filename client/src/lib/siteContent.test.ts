@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultSiteContent, loadSiteContent, normalizeSiteContent, saveSiteContent } from "./siteContent";
+import { defaultSiteContent, loadSiteContent, normalizeSiteContent, saveSiteContent, validateSitePages, isSafePageUrl, updatePageSlugInSiteContent } from "./siteContent";
 
 describe("site template password setting", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -41,5 +41,30 @@ describe("site template password setting", () => {
     const normalized = normalizeSiteContent({ buttons: [{ id: "legacy", label: "زر إضافي", placement: "hero", action: "external", url: "https://example.com" }] });
     expect(normalized.buttons.map((button) => button.id)).toEqual(expect.arrayContaining(["hero-gemini", "hero-chat", "hero-free-sites", "hero-creative-space", "legacy"]));
     expect(normalized.buttonCatalogInitialized).toBe(true);
+  });
+
+  it("rejects duplicate or unsafe page slugs while accepting internal and https URLs", () => {
+    const pages = [
+      { id: "one", slug: "same-page", title: "One", eyebrow: "", description: "", template: "landing" as const, visible: true },
+      { id: "two", slug: "same-page", title: "Two", eyebrow: "", description: "", template: "landing" as const, visible: true },
+    ];
+    const result = validateSitePages(pages);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.field === "slug")).toBe(true);
+    expect(isSafePageUrl("/custom/same-page")).toBe(true);
+    expect(isSafePageUrl("https://example.com/path")).toBe(true);
+    expect(isSafePageUrl("javascript:alert(1)")).toBe(false);
+    expect(isSafePageUrl("//evil.example")).toBe(false);
+  });
+
+  it("updates page button references when a slug is renamed", () => {
+    const content = normalizeSiteContent({
+      pages: [{ id: "page-1", slug: "old-page", title: "Page", eyebrow: "", description: "", template: "landing", visible: true }],
+      buttons: [{ id: "link", label: "Open", placement: "hero", action: "custom-page", url: "/custom/old-page" }],
+      buttonCatalogInitialized: true,
+    });
+    const renamed = updatePageSlugInSiteContent(content, "page-1", "new-page");
+    expect(renamed.pages[0].slug).toBe("new-page");
+    expect(renamed.buttons.find((button) => button.id === "link")?.url).toBe("/custom/new-page");
   });
 });

@@ -25,7 +25,9 @@ export type EditableButton = {
   id: string;
   label: string;
   placement: "hero" | "services" | "contact" | "header";
-  action: "contact" | "services" | "work" | "gemini" | "chat-gbt" | "free-sites" | "creative-space" | "custom-page" | "external";
+  action: "contact" | "services" | "work" | "gemini" | "chat-gbt" | "free-sites" | "creative-space" | "custom-page" | "internal" | "external";
+  target?: "_self" | "_blank";
+  size?: "small" | "medium" | "large";
   visible?: boolean;
   url?: string;
   backgroundColor?: string;
@@ -60,6 +62,15 @@ export type SiteSettings = {
   themeMode: "dark" | "light";
 };
 
+export type PageAppearance = {
+  backgroundColor?: string;
+  panelColor?: string;
+  textColor?: string;
+  mutedColor?: string;
+  accentColor?: string;
+  backgroundImage?: string;
+};
+
 export type EditablePage = {
   id: string;
   slug: string;
@@ -68,6 +79,13 @@ export type EditablePage = {
   description: string;
   template: "directory" | "showcase" | "landing";
   visible: boolean;
+  /** Pages without a status are legacy published pages. */
+  status?: "draft" | "published";
+  appearance?: PageAppearance;
+  /** A page can own its code, independent from the legacy site-level code. */
+  customCode?: CustomCode;
+  /** New pages set this false; omitted means preserve legacy site customCode behavior. */
+  useLegacyCustomCode?: boolean;
   blocks?: EditablePageBlock[];
 };
 
@@ -152,11 +170,96 @@ export const defaultSiteContent: SiteContent = {
   },
 };
 
+const PAGE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SAFE_HTTPS_PATTERN = /^https:\/\/[^\s]+$/i;
+
+export type SitePageValidationError = { index: number; field: "id" | "slug"; message: string };
+export type SitePageValidation = {
+  valid: boolean;
+  errors: SitePageValidationError[];
+  bySlug: Record<string, number>;
+};
+
+export function slugifyPageTitle(value: string, fallback = "page") {
+  const slug = value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return slug || fallback;
+}
+
+export function validatePageSlug(slug: string, pages: EditablePage[] = [], pageId?: string) {
+  const candidate = slug.trim();
+  if (!candidate) return "اكتب مسار الصفحة.";
+  if (candidate.length > 80) return "مسار الصفحة يجب ألا يتجاوز 80 حرفًا.";
+  if (!PAGE_SLUG_PATTERN.test(candidate)) return "استخدم حروفًا إنجليزية صغيرة وأرقامًا وفواصل شرطية فقط.";
+  if (pages.some((page) => page.id !== pageId && page.slug.toLowerCase() === candidate.toLowerCase())) return "هذا المسار مستخدم في صفحة أخرى.";
+  return null;
+}
+
+export function validateSitePages(pages: EditablePage[]): SitePageValidation {
+  const errors: SitePageValidationError[] = [];
+  const bySlug: Record<string, number> = {};
+  const byId: Record<string, number> = {};
+  pages.forEach((page, index) => {
+    if (!page.id.trim()) errors.push({ index, field: "id", message: "كل صفحة تحتاج معرّفًا." });
+    else if (byId[page.id] !== undefined) errors.push({ index, field: "id", message: "معرّف الصفحة مكرر." });
+    else byId[page.id] = index;
+    const slugError = validatePageSlug(page.slug, pages, page.id);
+    if (slugError) errors.push({ index, field: "slug", message: slugError });
+    const normalizedSlug = page.slug.trim().toLowerCase();
+    if (normalizedSlug) bySlug[normalizedSlug] = index;
+  });
+  return { valid: errors.length === 0, errors, bySlug };
+}
+
+export function isSafePageUrl(value: string | undefined | null): value is string {
+  if (!value) return false;
+  const url = value.trim();
+  const hasMarkup = ["<", ">", '"', "'"].some((character) => url.includes(character));
+  if (url.startsWith("/") && !url.startsWith("//") && !hasMarkup) return true;
+  return SAFE_HTTPS_PATTERN.test(url) && !hasMarkup;
+}
+
+export function isPublishedPage(page: EditablePage) {
+  return page.visible !== false && page.status !== "draft";
+}
+
+/** Rename a page and update managed internal button/block links without touching external URLs. */
+export function updatePageSlugInSiteContent(content: SiteContent, pageId: string, nextSlug: string): SiteContent {
+  const page = content.pages.find((item) => item.id === pageId);
+  if (!page) return content;
+  const oldUrl = `/custom/${page.slug}`;
+  const newUrl = `/custom/${nextSlug}`;
+  return {
+    ...content,
+    pages: content.pages.map((item) => item.id === pageId ? { ...item, slug: nextSlug } : item),
+    buttons: content.buttons.map((button) => button.url === oldUrl ? { ...button, url: newUrl } : button),
+  };
+}
+
+export function updatePageSlugReferences(content: SiteContent, previousSlug: string, nextSlug: string): SiteContent {
+  const oldUrl = `/custom/${previousSlug}`;
+  const newUrl = `/custom/${nextSlug}`;
+  return {
+    ...content,
+    buttons: content.buttons.map((button) => button.url === oldUrl ? { ...button, url: newUrl } : button),
+    pages: content.pages.map((page) => ({
+      ...page,
+      blocks: page.blocks?.map((block) => block.url === oldUrl ? { ...block, url: newUrl } : block),
+    })),
+  };
+}
+
 export function normalizeSiteContent(value: unknown): SiteContent {
   const saved = (value && typeof value === "object" ? value : {}) as Partial<SiteContent>;
   const legacyButtons = saved.buttonCatalogInitialized !== true;
   const savedButtons = Array.isArray(saved.buttons) ? saved.buttons : [];
   const migratedButtons = legacyButtons ? [...defaultSiteContent.buttons, ...savedButtons.filter((button) => !defaultSiteContent.buttons.some((base) => base.id === button.id))] : savedButtons;
+  const savedCode = saved.customCode && typeof saved.customCode === "object" ? saved.customCode as Partial<CustomCode> : {};
   return {
     ...defaultSiteContent,
     ...saved,
@@ -165,7 +268,8 @@ export function normalizeSiteContent(value: unknown): SiteContent {
     buttons: migratedButtons,
     pages: Array.isArray(saved.pages) ? saved.pages : defaultSiteContent.pages,
     settings: { ...defaultSiteContent.settings, ...(saved.settings || {}) },
-    customCode: { html: saved.customCode?.html || defaultSiteContent.customCode?.html || "", css: saved.customCode?.css || defaultSiteContent.customCode?.css || "", js: saved.customCode?.js || defaultSiteContent.customCode?.js || "", enabled: saved.customCode?.enabled === true },
+    // Spread the saved object so optional/future code metadata is not discarded.
+    customCode: { ...defaultSiteContent.customCode, ...savedCode, html: typeof savedCode.html === "string" ? savedCode.html : "", css: typeof savedCode.css === "string" ? savedCode.css : "", js: typeof savedCode.js === "string" ? savedCode.js : "", enabled: savedCode.enabled === true },
     buttonCatalogInitialized: true,
   };
 }

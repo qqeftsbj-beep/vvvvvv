@@ -5,14 +5,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    siteContent: { get: { useQuery: () => ({ data: null, isLoading: false }) }, save: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) } },
+    siteContent: {
+      get: { useQuery: () => ({ data: null, isLoading: false }) },
+      save: { useMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }) },
+      history: { useQuery: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }) },
+      backup: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      version: { useQuery: () => ({ data: null, isLoading: false }) },
+    },
     ownerSearch: { query: { useQuery: () => ({ data: { items: [], hasMore: false }, isLoading: false }) } },
     templates: {
       recycleBin: { useQuery: () => ({ data: null, isLoading: false }) }, retentionDays: { useQuery: () => ({ data: null, isLoading: false }) },
       restore: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) }, purge: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       cleanup: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) }, setRetentionDays: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
-    useUtils: () => ({ templates: { recycleBin: { invalidate: vi.fn() }, retentionDays: { invalidate: vi.fn() } } }),
+    useUtils: () => ({
+      templates: { recycleBin: { invalidate: vi.fn() }, retentionDays: { invalidate: vi.fn() } },
+      siteContent: { version: { fetch: vi.fn() }, get: { invalidate: vi.fn() } },
+    }),
   },
 }));
 vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "dark", toggleTheme: vi.fn() }) }));
@@ -32,15 +41,19 @@ describe("OwnerPanel organization", () => {
   beforeEach(() => { sessionStorage.setItem("abu-kayan-owner-panel", "true"); });
   afterEach(() => { cleanup(); sessionStorage.clear(); });
 
-  it("shows named sections and keeps only the identity section open initially", () => {
+  it("shows named sections with a compact tabbed organizer", () => {
     render(<OwnerPanel />);
     expect(screen.getByText("الهوية والمحتوى")).toBeTruthy();
     expect(screen.getByText("المظهر العام")).toBeTruthy();
     expect(screen.getByText("مراجعة المشاركات")).toBeTruthy();
     const sections = Array.from(document.querySelectorAll("details.owner-panel-section"));
-    expect(sections).toHaveLength(12);
+    expect(sections).toHaveLength(13);
     expect(sections[0].hasAttribute("open")).toBe(true);
     expect(sections.slice(1).every((section) => !section.hasAttribute("open"))).toBe(true);
+    expect(screen.getByRole("tablist", { name: "أقسام لوحة التحكم" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "إدارة الصفحات" }));
+    expect((sections.find((section) => section.id === "owner-pages") as HTMLDetailsElement | undefined)?.hidden).toBe(false);
+    expect(screen.getByRole("heading", { name: /أنشئ صفحاتك وانشرها/ })).toBeTruthy();
   });
 
   it("shows unsaved state after editing and exposes the global search field", () => {

@@ -7,6 +7,7 @@ import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, createCreativeCategory, updateCreativeCategory, deleteCreativeCategory, searchOwnerContent, listTemplateCategories, createTemplateCategory, updateTemplateCategory, deleteTemplateCategory } from "./db";
 import { storagePut } from "./storage";
+import { backupSiteContent, listSiteContentHistory, readSiteContentVersion, saveSiteContentReliable } from "./siteContentPersistence";
 
 const toolSchema = z.enum(["Gemini", "Chat GBT"]);
 const templateInput = z.object({
@@ -94,7 +95,21 @@ export const appRouter = router({
     }),
     save: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), content: z.record(z.string(), z.unknown()) })).mutation(({ input }) => {
       if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
-      return saveSiteContent(JSON.stringify(input.content));
+      return saveSiteContentReliable(input.content);
+    }),
+    history: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32) })).query(({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      return listSiteContentHistory();
+    }),
+    version: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number().int().positive() })).query(async ({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      const content = await readSiteContentVersion(input.id);
+      if (!content) throw new TRPCError({ code: "NOT_FOUND", message: "نسخة المحتوى غير موجودة." });
+      return content;
+    }),
+    backup: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32) })).mutation(({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      return backupSiteContent();
     }),
   }),
   ownerSearch: router({

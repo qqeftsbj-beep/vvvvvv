@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /** Core user table backing auth flow. */
 export const users = mysqlTable("users", {
@@ -47,8 +47,15 @@ export const templateSettings = mysqlTable("template_settings", {
 
 export const siteSettings = mysqlTable("site_settings", {
   id: int("id").primaryKey(),
-  contentJson: text("contentJson").notNull(),
+  contentJson: mediumtext("contentJson").notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/** Immutable snapshots used for site-content backup/history. */
+export const siteContentVersions = mysqlTable("site_content_versions", {
+  id: int("id").autoincrement().primaryKey(),
+  contentJson: mediumtext("contentJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export const creativeCategories = mysqlTable("creative_categories", {
@@ -102,5 +109,6 @@ export type InsertFreeSite = typeof freeSites.$inferInsert;
 export type CreativeSubmission = typeof creativeSubmissions.$inferSelect;
 export type InsertCreativeSubmission = typeof creativeSubmissions.$inferInsert;
 export type SiteSettings = typeof siteSettings.$inferSelect;
+export type SiteContentVersion = typeof siteContentVersions.$inferSelect;
 export type CreativeCategory = typeof creativeCategories.$inferSelect;
 export type InsertCreativeCategory = typeof creativeCategories.$inferInsert;
