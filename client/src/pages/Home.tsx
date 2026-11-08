@@ -246,6 +246,7 @@ export default function Home() {
   } as CSSProperties;
   const customButtons = (placement: EditableButton["placement"]) => content.buttons.filter((button) => button.placement === placement && button.visible !== false).sort((a, b) => (a.order || 0) - (b.order || 0));
   const customButtonStyle = (button: EditableButton) => ({ backgroundColor: button.backgroundColor || undefined, color: button.textColor || undefined, borderColor: button.borderColor || undefined, borderRadius: `${button.radius ?? content.settings.buttonRadius}px`, fontSize: button.fontSize ? `${button.fontSize}px` : undefined });
+  const buttonIcon = (button: EditableButton) => button.icon === "globe" ? <Globe2 size={16} /> : button.icon === "message" ? <MessageCircle size={16} /> : button.icon === "arrow" ? <ArrowLeft size={16} /> : <Sparkles size={16} />;
   return (
     <main dir="rtl" className={`site-shell ${lightMode ? "site-light" : ""}`} style={dynamicStyle}>
       <div className="paper-grain" aria-hidden="true" />
@@ -343,13 +344,9 @@ export default function Home() {
             {content.heroLead}
           </p>
 
-          <div className="ai-tool-actions" aria-label="أدوات التصميم بالذكاء الاصطناعي">
-            <Link href="/templates/gemini" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Gemini <ArrowLeft size={15} /></Link>
-            <Link href="/templates/chat-gbt" className="ai-tool-button"><Sparkles size={16} /> تصاميم عبر Chat GBT <ArrowLeft size={15} /></Link>
-            <Link href="/free-sites" className="ai-tool-button"><Globe2 size={16} /> مواقع وخدمات مجانية مختارة <ArrowLeft size={15} /></Link>
-            <Link href="/creative-space" className="ai-tool-button"><Sparkles size={16} /> مساحتك للإبداع <ArrowLeft size={15} /></Link>
+          <div className="ai-tool-actions" aria-label="أدوات التصميم والخدمات الرئيسية">
+            {customButtons("hero").map((button) => <button key={button.id} type="button" className="ai-tool-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{buttonIcon(button)} {button.label} <ArrowLeft size={15} /></button>)}
           </div>
-          {customButtons("hero").length > 0 && <div className="custom-hero-actions">{customButtons("hero").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{button.label}<ArrowLeft size={14} /></button>)}</div>}
           <div className="hero-proof">
             <div className="proof-avatars" aria-hidden="true">
               <span>أ</span>

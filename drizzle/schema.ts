@@ -13,9 +13,21 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+export const templateCategories = mysqlTable("template_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  tool: varchar("tool", { length: 32 }).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  isVisible: int("isVisible").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const sharedTemplates = mysqlTable("shared_templates", {
   id: int("id").autoincrement().primaryKey(),
   tool: varchar("tool", { length: 32 }).notNull(),
+  category: varchar("category", { length: 160 }).default("other").notNull(),
   text: text("text").notNull(),
   imageUrl: text("imageUrl").notNull(),
   imageKey: text("imageKey").notNull(),
@@ -81,6 +93,8 @@ export const freeSites = mysqlTable("free_sites", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type TemplateCategory = typeof templateCategories.$inferSelect;
+export type InsertTemplateCategory = typeof templateCategories.$inferInsert;
 export type SharedTemplate = typeof sharedTemplates.$inferSelect;
 export type InsertSharedTemplate = typeof sharedTemplates.$inferInsert;
 export type FreeSite = typeof freeSites.$inferSelect;

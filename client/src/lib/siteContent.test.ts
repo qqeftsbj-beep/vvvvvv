@@ -36,4 +36,10 @@ describe("site template password setting", () => {
     expect(normalized.settings.goldColor).toBe("#ffffff");
     expect(normalized.services.length).toBeGreaterThan(0);
   });
+
+  it("migrates legacy content into the managed hero button catalog", () => {
+    const normalized = normalizeSiteContent({ buttons: [{ id: "legacy", label: "زر إضافي", placement: "hero", action: "external", url: "https://example.com" }] });
+    expect(normalized.buttons.map((button) => button.id)).toEqual(expect.arrayContaining(["hero-gemini", "hero-chat", "hero-free-sites", "hero-creative-space", "legacy"]));
+    expect(normalized.buttonCatalogInitialized).toBe(true);
+  });
 });

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNotNull, isNull, lt, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { CreativeCategory, CreativeSubmission, FreeSite, InsertCreativeCategory, InsertCreativeSubmission, InsertFreeSite, InsertSharedTemplate, InsertUser, creativeCategories, creativeSubmissions, freeSites, sharedTemplates, siteSettings, templateSettings, User, users } from "../drizzle/schema";
+import { CreativeCategory, CreativeSubmission, FreeSite, InsertCreativeCategory, InsertCreativeSubmission, InsertFreeSite, InsertSharedTemplate, InsertTemplateCategory, InsertUser, creativeCategories, creativeSubmissions, freeSites, sharedTemplates, siteSettings, templateCategories, templateSettings, User, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -38,11 +38,49 @@ export async function getUserByOpenId(openId: string): Promise<User | undefined>
   return result[0];
 }
 
-export async function listSharedTemplates(tool: string) {
+export async function listSharedTemplates(tool: string, category?: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(sharedTemplates).where(and(eq(sharedTemplates.tool, tool), isNull(sharedTemplates.deletedAt))).orderBy(desc(sharedTemplates.createdAt));
+  return db.select().from(sharedTemplates).where(and(eq(sharedTemplates.tool, tool), ...(category ? [eq(sharedTemplates.category, category)] : []), isNull(sharedTemplates.deletedAt))).orderBy(desc(sharedTemplates.createdAt));
 }
+
+const defaultTemplateCategories: Record<string, Array<Omit<InsertTemplateCategory, "tool">>> = {
+  Gemini: [
+    { name: "الأعراس والمناسبات", slug: "gemini-weddings", sortOrder: 1, isVisible: 1 },
+    { name: "الأعياد", slug: "gemini-eids", sortOrder: 2, isVisible: 1 },
+    { name: "البدل الرسمية", slug: "gemini-formal", sortOrder: 3, isVisible: 1 },
+    { name: "إبداعية", slug: "gemini-creative", sortOrder: 4, isVisible: 1 },
+    { name: "التعليم", slug: "gemini-education", sortOrder: 5, isVisible: 1 },
+    { name: "نسائية", slug: "gemini-women", sortOrder: 6, isVisible: 1 },
+    { name: "فنية وإعلانية", slug: "gemini-art-ads", sortOrder: 7, isVisible: 1 },
+    { name: "أخرى", slug: "gemini-other", sortOrder: 8, isVisible: 1 },
+  ],
+  "Chat GBT": [
+    { name: "عيد الميلاد", slug: "chat-birthday", sortOrder: 1, isVisible: 1 },
+    { name: "الألعاب", slug: "chat-games", sortOrder: 2, isVisible: 1 },
+    { name: "رسمية", slug: "chat-formal", sortOrder: 3, isVisible: 1 },
+    { name: "إبداعية", slug: "chat-creative", sortOrder: 4, isVisible: 1 },
+    { name: "أخرى", slug: "chat-other", sortOrder: 5, isVisible: 1 },
+  ],
+};
+
+export async function listTemplateCategories(tool: string, includeHidden = false) {
+  const defaults = (defaultTemplateCategories[tool] || []).map((item, index) => ({ ...item, tool, id: index + 1, createdAt: new Date(), updatedAt: new Date() }));
+  const db = await getDb();
+  if (!db) return defaults;
+  let rows = await db.select().from(templateCategories).where(eq(templateCategories.tool, tool)).orderBy(asc(templateCategories.sortOrder), asc(templateCategories.createdAt));
+  if (!rows.length) {
+    await db.insert(templateCategories).values(defaults.map(({ id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...item }) => item));
+    rows = await db.select().from(templateCategories).where(eq(templateCategories.tool, tool)).orderBy(asc(templateCategories.sortOrder), asc(templateCategories.createdAt));
+  }
+  const fallback = rows.find((row) => row.slug === `${tool === "Gemini" ? "gemini" : "chat"}-other`);
+  if (fallback) await db.update(sharedTemplates).set({ category: fallback.slug }).where(and(eq(sharedTemplates.tool, tool), eq(sharedTemplates.category, "other")));
+  return includeHidden ? rows : rows.filter((row) => row.isVisible === 1);
+}
+
+export async function createTemplateCategory(input: InsertTemplateCategory) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(templateCategories).values(input); const rows = await db.select().from(templateCategories).where(eq(templateCategories.id, Number(result[0].insertId))).limit(1); return rows[0]; }
+export async function updateTemplateCategory(id: number, input: Partial<InsertTemplateCategory>) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(templateCategories).set(input).where(eq(templateCategories.id, id)); const rows = await db.select().from(templateCategories).where(eq(templateCategories.id, id)).limit(1); return rows[0]; }
+export async function deleteTemplateCategory(id: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const rows = await db.select().from(templateCategories).where(eq(templateCategories.id, id)).limit(1); if (rows[0]) await db.update(sharedTemplates).set({ category: `${rows[0].tool === "Gemini" ? "gemini" : "chat"}-other` }).where(eq(sharedTemplates.category, rows[0].slug)); await db.delete(templateCategories).where(eq(templateCategories.id, id)); return { success: true } as const; }
 
 export async function listDeletedSharedTemplates() {
   const db = await getDb();

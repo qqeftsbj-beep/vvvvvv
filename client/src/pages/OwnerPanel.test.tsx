@@ -23,6 +23,7 @@ vi.mock("wouter", () => ({ Link: ({ children, ...props }: { children: ReactNode;
 vi.mock("./OwnerFreeSites", () => ({ default: () => <div data-testid="free-sites-admin" /> }));
 vi.mock("./OwnerCreativeSpace", () => ({ default: () => <div data-testid="creative-admin" /> }));
 vi.mock("./OwnerCreativeCategories", () => ({ default: () => <div data-testid="categories-admin" /> }));
+vi.mock("./OwnerTemplateCategories", () => ({ default: ({ tool }: { tool: string }) => <div data-testid={`template-categories-${tool}`} /> }));
 vi.mock("./OwnerCodeWorkspace", () => ({ default: () => <div data-testid="code-admin" /> }));
 
 import OwnerPanel from "./OwnerPanel";
@@ -37,7 +38,7 @@ describe("OwnerPanel organization", () => {
     expect(screen.getByText("المظهر العام")).toBeTruthy();
     expect(screen.getByText("مراجعة المشاركات")).toBeTruthy();
     const sections = Array.from(document.querySelectorAll("details.owner-panel-section"));
-    expect(sections).toHaveLength(10);
+    expect(sections).toHaveLength(12);
     expect(sections[0].hasAttribute("open")).toBe(true);
     expect(sections.slice(1).every((section) => !section.hasAttribute("open"))).toBe(true);
   });

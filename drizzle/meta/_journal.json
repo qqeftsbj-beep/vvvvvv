@@ -50,6 +50,13 @@
       "when": 1793568775088,
       "tag": "0006_glossy_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1793741060948,
+      "tag": "0007_broken_boomer",
+      "breakpoints": true
     }
   ]
 }

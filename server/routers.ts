@@ -5,12 +5,13 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
-import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, createCreativeCategory, updateCreativeCategory, deleteCreativeCategory, searchOwnerContent } from "./db";
+import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, createCreativeCategory, updateCreativeCategory, deleteCreativeCategory, searchOwnerContent, listTemplateCategories, createTemplateCategory, updateTemplateCategory, deleteTemplateCategory } from "./db";
 import { storagePut } from "./storage";
 
 const toolSchema = z.enum(["Gemini", "Chat GBT"]);
 const templateInput = z.object({
   tool: toolSchema,
+  category: z.string().max(160).default("other"),
   text: z.string().max(10000),
   mediaType: z.enum(["image", "video"]).default("image"),
   mediaData: z.string().min(1).optional(),
@@ -46,16 +47,17 @@ export const appRouter = router({
     }),
   }),
   templates: router({
-    list: publicProcedure.input(z.object({ tool: toolSchema })).query(({ input }) => listSharedTemplates(input.tool)),
+    list: publicProcedure.input(z.object({ tool: toolSchema, category: z.string().max(160).optional() })).query(({ input }) => input.category ? listSharedTemplates(input.tool, input.category) : listSharedTemplates(input.tool)),
     create: publicProcedure.input(templateInput).mutation(async ({ input, ctx }) => {
       verifyTemplatePassword(input.ownerPassword);
       const decoded = decodeDataUrl(input.mediaData || input.imageData || "");
       const uploaded = await storagePut(`shared-templates/${input.tool.toLowerCase().replace(/\s+/g, "-")}/${input.imageName}`, decoded.buffer, decoded.contentType);
-      return createSharedTemplate({ tool: input.tool, text: input.text, imageUrl: uploaded.url, imageKey: uploaded.key, imageName: input.imageName, mediaType: input.mediaType, createdByOpenId: ctx.user?.openId || "password-owner" });
+      return createSharedTemplate({ tool: input.tool, category: input.category, text: input.text, imageUrl: uploaded.url, imageKey: uploaded.key, imageName: input.imageName, mediaType: input.mediaType, createdByOpenId: ctx.user?.openId || "password-owner" });
     }),
-    update: publicProcedure.input(z.object({ id: z.number(), text: z.string().max(10000).optional(), mediaType: z.enum(["image", "video"]).optional(), mediaData: z.string().optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional(), ownerPassword: z.string().min(1).max(128) })).mutation(async ({ input, ctx }) => {
+    update: publicProcedure.input(z.object({ id: z.number(), category: z.string().max(160).optional(), text: z.string().max(10000).optional(), mediaType: z.enum(["image", "video"]).optional(), mediaData: z.string().optional(), imageData: z.string().optional(), imageName: z.string().max(255).optional(), ownerPassword: z.string().min(1).max(128) })).mutation(async ({ input, ctx }) => {
       verifyTemplatePassword(input.ownerPassword);
       const update: Record<string, unknown> = {};
+      if (input.category !== undefined) update.category = input.category;
       if (input.text !== undefined) update.text = input.text;
       if (input.imageName !== undefined) update.imageName = input.imageName;
       if (input.mediaType !== undefined) update.mediaType = input.mediaType;
@@ -75,6 +77,14 @@ export const appRouter = router({
     cleanup: ownerProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365).default(30) })).mutation(({ input }) => cleanupDeletedSharedTemplates(input.retentionDays)),
     retentionDays: ownerProcedure.query(() => getTemplateRetentionDays()),
     setRetentionDays: ownerProcedure.input(z.object({ retentionDays: z.number().int().min(30).max(365) })).mutation(({ input }) => setTemplateRetentionDays(input.retentionDays)),
+  }),
+  templateCategories: router({
+    list: publicProcedure.input(z.object({ tool: toolSchema })).query(({ input }) => listTemplateCategories(input.tool, false)),
+    adminList: publicProcedure.input(z.object({ tool: toolSchema })).query(({ input }) => listTemplateCategories(input.tool, true)),
+    createWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), tool: toolSchema, name: z.string().trim().min(1).max(120), slug: z.string().trim().min(1).max(160), sortOrder: z.number().int().min(0).default(0), isVisible: z.boolean().default(true) })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); const { ownerPin: _ownerPin, isVisible, ...category } = input; return createTemplateCategory({ ...category, isVisible: isVisible ? 1 : 0 }); }),
+    updateWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number(), name: z.string().trim().min(1).max(120).optional(), slug: z.string().trim().min(1).max(160).optional(), sortOrder: z.number().int().min(0).optional(), isVisible: z.boolean().optional() })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); const { ownerPin: _ownerPin, id, isVisible, ...rest } = input; return updateTemplateCategory(id, { ...rest, ...(isVisible === undefined ? {} : { isVisible: isVisible ? 1 : 0 }) }); }),
+    reorderWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), tool: toolSchema, ids: z.array(z.number()).max(100) })).mutation(async ({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); await Promise.all(input.ids.map((id, index) => updateTemplateCategory(id, { sortOrder: index + 1 }))); return listTemplateCategories(input.tool, true); }),
+    removeWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number() })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); return deleteTemplateCategory(input.id); }),
   }),
   siteContent: router({
     get: publicProcedure.query(async () => {

@@ -23,7 +23,7 @@ describe("OwnerCodeWorkspace safe settings flow", () => {
     const onApply = vi.fn();
     render(<OwnerCodeWorkspace content={defaultSiteContent} onApply={onApply} />);
     expect(screen.getByText(/ملف JSON يحتوي فقط على إعدادات/)).toBeTruthy();
-    const editor = screen.getByRole("textbox");
+    const editor = screen.getByLabelText("وثيقة الإعدادات JSON");
     const next = JSON.stringify({ schemaVersion: 1, siteContent: { ...defaultSiteContent, heroTitle: "عنوان مسودة" }, extensions: {} }, null, 2);
     fireEvent.change(editor, { target: { value: next } });
     fireEvent.click(screen.getByRole("button", { name: /معاينة ومقارنة/ }));
@@ -34,7 +34,7 @@ describe("OwnerCodeWorkspace safe settings flow", () => {
   it("creates a backup and applies only after explicit confirmation", () => {
     const onApply = vi.fn();
     render(<OwnerCodeWorkspace content={defaultSiteContent} onApply={onApply} />);
-    const editor = screen.getByRole("textbox");
+    const editor = screen.getByLabelText("وثيقة الإعدادات JSON");
     const next = JSON.stringify({ schemaVersion: 1, siteContent: { ...defaultSiteContent, heroTitle: "عنوان معتمد" }, extensions: { futurePanel: { enabled: true } } }, null, 2);
     fireEvent.change(editor, { target: { value: next } });
     fireEvent.click(screen.getByRole("button", { name: /تطبيق بعد الموافقة/ }));

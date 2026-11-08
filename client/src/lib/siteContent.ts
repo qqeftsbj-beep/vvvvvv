@@ -33,6 +33,7 @@ export type EditableButton = {
   borderColor?: string;
   fontSize?: number;
   radius?: number;
+  icon?: "sparkles" | "globe" | "arrow" | "message";
   order?: number;
 };
 
@@ -67,7 +68,21 @@ export type EditablePage = {
   description: string;
   template: "directory" | "showcase" | "landing";
   visible: boolean;
+  blocks?: EditablePageBlock[];
 };
+
+export type EditablePageBlock = {
+  id: string;
+  type: "text" | "image" | "button" | "service";
+  title?: string;
+  content?: string;
+  image?: string;
+  url?: string;
+  visible?: boolean;
+  order?: number;
+};
+
+export type CustomCode = { html: string; css: string; js: string; enabled: boolean };
 
 export type SiteContent = {
   heroEyebrow: string;
@@ -83,6 +98,8 @@ export type SiteContent = {
   buttons: EditableButton[];
   pages: EditablePage[];
   settings: SiteSettings;
+  customCode?: CustomCode;
+  buttonCatalogInitialized?: boolean;
 };
 
 export const SITE_CONTENT_KEY = "abu-kayan-site-content";
@@ -102,8 +119,15 @@ export const defaultSiteContent: SiteContent = {
     { number: "03", order: 3, visible: true, title: "المواقع وصفحات الهبوط", description: "نحوّل فكرتك إلى واجهة مرتبة، سريعة، ومتجاوبة تساعد العميل على فهمك واتخاذ الخطوة التالية.", tag: "ويب + تجربة مستخدم" },
   ],
   products: [],
-  buttons: [],
+  buttons: [
+    { id: "hero-gemini", label: "تصاميم عبر Gemini وChatGPT", placement: "hero", action: "gemini", icon: "sparkles", visible: true, order: 1 },
+    { id: "hero-chat", label: "تصاميم الأطفال", placement: "hero", action: "chat-gbt", icon: "sparkles", visible: true, order: 2 },
+    { id: "hero-free-sites", label: "مواقع وخدمات مجانية مختارة", placement: "hero", action: "free-sites", icon: "globe", visible: true, order: 3 },
+    { id: "hero-creative-space", label: "مساحتك للإبداع", placement: "hero", action: "creative-space", icon: "sparkles", visible: true, order: 4 },
+  ],
   pages: [],
+  customCode: { html: "", css: "", js: "", enabled: false },
+  buttonCatalogInitialized: true,
   settings: {
     fontFamily: "Cairo",
     headingFontFamily: "Noto Kufi Arabic",
@@ -130,14 +154,19 @@ export const defaultSiteContent: SiteContent = {
 
 export function normalizeSiteContent(value: unknown): SiteContent {
   const saved = (value && typeof value === "object" ? value : {}) as Partial<SiteContent>;
+  const legacyButtons = saved.buttonCatalogInitialized !== true;
+  const savedButtons = Array.isArray(saved.buttons) ? saved.buttons : [];
+  const migratedButtons = legacyButtons ? [...defaultSiteContent.buttons, ...savedButtons.filter((button) => !defaultSiteContent.buttons.some((base) => base.id === button.id))] : savedButtons;
   return {
     ...defaultSiteContent,
     ...saved,
     services: Array.isArray(saved.services) && saved.services.length ? saved.services : defaultSiteContent.services,
     products: Array.isArray(saved.products) ? saved.products : defaultSiteContent.products,
-    buttons: Array.isArray(saved.buttons) ? saved.buttons : defaultSiteContent.buttons,
+    buttons: migratedButtons,
     pages: Array.isArray(saved.pages) ? saved.pages : defaultSiteContent.pages,
     settings: { ...defaultSiteContent.settings, ...(saved.settings || {}) },
+    customCode: { html: saved.customCode?.html || defaultSiteContent.customCode?.html || "", css: saved.customCode?.css || defaultSiteContent.customCode?.css || "", js: saved.customCode?.js || defaultSiteContent.customCode?.js || "", enabled: saved.customCode?.enabled === true },
+    buttonCatalogInitialized: true,
   };
 }
 

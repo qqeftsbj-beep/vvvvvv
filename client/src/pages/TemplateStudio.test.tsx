@@ -9,12 +9,15 @@ const longTemplateText = "هذه رسالة طويلة لاختبار عرض ا�
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     templates: {
-      list: { useQuery: () => ({ data: [{ id: 8, text: longTemplateText, imageUrl: "/manus-storage/shared.png", imageName: "shared.png", mediaType: "image", createdAt: "2026-09-16T12:00:00.000Z" }], isLoading: false }) },
+      list: { useQuery: () => ({ data: [{ id: 8, text: longTemplateText, imageUrl: "/manus-storage/shared.png", imageName: "shared.png", mediaType: "image", category: "gemini-weddings", createdAt: "2026-09-16T12:00:00.000Z" }], isLoading: false }) },
       create: { useMutation: () => ({ mutate, isPending: false }) },
       update: { useMutation: () => ({ mutate, isPending: false }) },
       remove: { useMutation: () => ({ mutate, isPending: false }) },
     },
-    useUtils: () => ({ templates: { list: { invalidate: vi.fn() } } }),
+    templateCategories: {
+      list: { useQuery: () => ({ data: [{ id: 1, tool: "Gemini", name: "الأعراس والمناسبات", slug: "gemini-weddings", sortOrder: 1, isVisible: 1 }], isLoading: false }) },
+    },
+    useUtils: () => ({ templates: { list: { invalidate: vi.fn() } }, templateCategories: { list: { invalidate: vi.fn() } } }),
   },
 }));
 
@@ -50,6 +53,7 @@ describe("TemplateStudio interactive flow", () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).toBeTruthy();
     const textArea = screen.getByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...");
+    expect(screen.getByLabelText("قسم التصميم")).toBeTruthy();
     fireEvent.change(input, { target: { files: [new File(["first"], "first.png", { type: "image/png" })] } });
     await waitFor(() => expect(screen.getByText(/first\.png/)).toBeTruthy());
     fireEvent.change(textArea, { target: { value: "القالب الأول" } });
@@ -59,6 +63,7 @@ describe("TemplateStudio interactive flow", () => {
     await waitFor(() => expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull());
     expect(screen.getByRole("button", { name: "إضافة قالب جديد" })).toBeTruthy();
     expect(input.value).toBe("");
+    expect(mutate.mock.calls[0]?.[0]).toMatchObject({ category: "gemini-weddings" });
 
     fireEvent.click(screen.getByRole("button", { name: "إضافة قالب جديد" }));
     const secondInput = container.querySelector('input[type="file"]') as HTMLInputElement;

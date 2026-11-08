@@ -37,6 +37,7 @@ type Template = {
   mediaData: string;
   mediaName: string;
   mediaType: MediaType;
+  category: string;
   createdAt?: number;
 };
 
@@ -94,6 +95,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const templatesQuery = trpc.templates.list.useQuery({ tool: toolName }, { refetchOnWindowFocus: true, staleTime: 0 });
+  const categoriesQuery = trpc.templateCategories.list.useQuery({ tool: toolName }, { refetchOnWindowFocus: true, staleTime: 0 });
   const templates = useMemo<Template[]>(() => (templatesQuery.data || []).map((item) => ({
     id: String(item.id),
     serverId: item.id,
@@ -101,6 +103,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     mediaData: item.imageUrl,
     mediaName: item.imageName,
     mediaType: (item.mediaType === "video" ? "video" : "image") as MediaType,
+    category: item.category || "other",
     createdAt: new Date(item.createdAt).getTime(),
   })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [templatesQuery.data]);
   const utils = trpc.useUtils();
@@ -112,6 +115,8 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const [mediaData, setMediaData] = useState("");
   const [mediaName, setMediaName] = useState("");
   const [mediaType, setMediaType] = useState<MediaType>("image");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [draftCategory, setDraftCategory] = useState("other");
   const [copiedId, setCopiedId] = useState("");
   const [expandedTextIds, setExpandedTextIds] = useState<string[]>([]);
   const [isOwner, setIsOwner] = useState(false);
@@ -129,6 +134,18 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   }, []);
 
   const activeTemplate = useMemo(() => templates.find((template) => template.id === activeId), [activeId, templates]);
+  const visibleCategories = categoriesQuery.data || [];
+  const categoryNames = useMemo(() => new Map(visibleCategories.map((category) => [category.slug, category.name])), [visibleCategories]);
+  const visibleTemplateItems = useMemo(() => {
+    const allowed = new Set(visibleCategories.map((category) => category.slug));
+    const publicTemplates = isOwner || !visibleCategories.length ? templates : templates.filter((template) => allowed.has(template.category));
+    return selectedCategory === "all" ? publicTemplates : publicTemplates.filter((template) => template.category === selectedCategory);
+  }, [isOwner, selectedCategory, templates, visibleCategories]);
+
+  useEffect(() => {
+    if (draftCategory !== "other" || !visibleCategories.length) return;
+    setDraftCategory(visibleCategories[0]?.slug || "other");
+  }, [draftCategory, visibleCategories]);
 
   useEffect(() => {
     const sharedId = new URLSearchParams(window.location.search).get("template");
@@ -144,6 +161,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     setMediaData("");
     setMediaName("");
     setMediaType("image");
+    setDraftCategory(visibleCategories[0]?.slug || "other");
     if (uploadInputRef.current) uploadInputRef.current.value = "";
   };
 
@@ -194,12 +212,12 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
     if (!isOwner) return toast("اضغط إضافة قالب جديد وأدخل كلمة المرور أولًا.");
     if (!mediaData || !text.trim()) return toast.error("أضف صورة أو فيديو ونصًا قبل الحفظ.");
-    const payload = { tool: toolName, text: text.trim(), mediaType, mediaData, imageName: mediaName || `abu-kayan-${mediaType}`, ownerPassword: templatePassword };
+    const payload = { tool: toolName, category: draftCategory, text: text.trim(), mediaType, mediaData, imageName: mediaName || `abu-kayan-${mediaType}`, ownerPassword: templatePassword };
     if (activeTemplate?.serverId) {
       // Existing templates use a storage URL. Upload only when a new local file was selected.
       const newMedia = mediaData.startsWith("data:") ? { mediaData } : {};
       updateTemplateMutation.mutate(
-        { id: activeTemplate.serverId, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName, ownerPassword: templatePassword },
+        { id: activeTemplate.serverId, category: draftCategory, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName, ownerPassword: templatePassword },
         { onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: (error) => toast.error(error.message || "تعذر تحديث القالب المشترك.") },
       );
       return;
@@ -218,6 +236,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       setMediaData(template.mediaData);
       setMediaName(template.mediaName);
       setMediaType(template.mediaType);
+      setDraftCategory(template.category);
     }
   };
 
@@ -274,7 +293,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
 
   const downloadEditor = async () => {
     if (mediaType === "video") {
-      downloadMedia({ id: "draft", text, mediaData, mediaName: mediaName || "abu-kayan-video", mediaType });
+      downloadMedia({ id: "draft", text, mediaData, mediaName: mediaName || "abu-kayan-video", mediaType, category: draftCategory });
       return;
     }
     if (!mediaData && !text.trim()) return toast.error("أضف صورة أو نصًا قبل التحميل.");
@@ -316,17 +335,19 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
           <label className="upload-zone"><input ref={uploadInputRef} type="file" accept="image/*,video/*" onChange={handleMedia} /><span className="upload-empty"><ImagePlus size={28} /><strong>{mediaData ? "تغيير الصورة أو الفيديو" : "ارفع صورة أو فيديو"}</strong><small>الصورة أو الفيديو سيظهران مع النص في بطاقة واحدة.</small><span className="upload-chip"><Upload size={14} /> اختيار ملف</span></span></label>
           {mediaName && <div className="file-name">{mediaName} · {mediaType === "video" ? "فيديو" : "صورة"}</div>}
           <label className="studio-field"><span>النص أسفل الوسيط</span><textarea value={text} maxLength={MAX_TEXT_LENGTH} onChange={(event) => setText(event.target.value)} placeholder="اكتب التهنئة أو النص الذي تريد الاحتفاظ به..." /><small>{text.length.toLocaleString("ar-EG")} / 10,000</small></label>
+          <label className="studio-field"><span>قسم التصميم</span><select aria-label="قسم التصميم" value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{visibleCategories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select><small>اختر القسم الذي سيظهر فيه التصميم للزوار.</small></label>
           <div className="template-card-preview"><div className="template-card-image">{mediaData ? renderMedia(mediaData, mediaType) : <ImagePlus size={28} />}</div><p>{text || "سيظهر النص هنا تحت الصورة أو الفيديو"}</p><span>أبو كيان الجنيد · {toolName}</span></div>
           <div className="studio-action-row"><button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ ونشر القالب"}</button><button type="button" className="studio-outline-button" onClick={() => copyValue(text, "draft")}>{copiedId === "draft" ? <Check size={16} /> : <Clipboard size={16} />} {copiedId === "draft" ? "تم النسخ" : "نسخ النص"}</button><button type="button" className="studio-outline-button" onClick={downloadEditor}><Download size={16} /> تحميل</button></div>
         </>}
       </div>}
       <aside className="studio-library">
         <div className="studio-library-head">
-          <div><span className="studio-label">المكتبة السابقة · الأحدث أولًا</span><h2>القوالب المشتركة <b>{templates.length}</b></h2></div>
+          <div><span className="studio-label">المكتبة السابقة · الأحدث أولًا</span><h2>القوالب المشتركة <b>{visibleTemplateItems.length}</b></h2></div>
           <button type="button" className="studio-primary-button studio-new-template" onClick={openCreator}><Plus size={16} /> إضافة قالب جديد</button>
         </div>
-        {templates.length === 0 ? <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة بعد.<br />اضغط «إضافة قالب جديد» للبدء.</p></div> : <div className="library-list">
-          {templates.map((template, index) => {
+        <div className="template-category-tabs" role="tablist" aria-label="أقسام التصاميم"><button type="button" className={selectedCategory === "all" ? "is-active" : ""} onClick={() => setSelectedCategory("all")}>الكل</button>{visibleCategories.map((category) => <button type="button" key={category.slug} className={selectedCategory === category.slug ? "is-active" : ""} onClick={() => setSelectedCategory(category.slug)}>{category.name}</button>)}</div>
+        {visibleTemplateItems.length === 0 ? <div className="library-empty"><ImagePlus size={22} /><p>لا توجد قوالب منشورة في هذا القسم بعد.<br />اضغط «إضافة قالب جديد» للبدء.</p></div> : <div className="library-list">
+          {visibleTemplateItems.map((template, index) => {
             const isExpanded = expandedTextIds.includes(template.id);
             const isLong = template.text.length > 240;
             const visibleText = isExpanded || !isLong ? template.text : `${template.text.slice(0, 240).trimEnd()}…`;
@@ -335,7 +356,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
                 <span className="library-item-media">{template.mediaData ? renderMedia(template.mediaData, template.mediaType) : <Sparkles size={28} />}</span>
               </button>
               <div className="library-item-body">
-                <div className="library-item-heading"><span><b>قالب {String(index + 1).padStart(2, "0")}</b><small>{template.mediaType === "video" ? <><FileVideo size={11} /> فيديو</> : "صورة"}</small></span><time>{template.createdAt ? new Date(template.createdAt).toLocaleDateString("ar-YE") : ""}</time></div>
+                <div className="library-item-heading"><span><b>قالب {String(index + 1).padStart(2, "0")}</b><small>{categoryNames.get(template.category) || "أخرى"} · {template.mediaType === "video" ? <><FileVideo size={11} /> فيديو</> : "صورة"}</small></span><time>{template.createdAt ? new Date(template.createdAt).toLocaleDateString("ar-YE") : ""}</time></div>
                 <div className="whatsapp-message"><p>{visibleText || "بدون نص"}</p>{isLong && <button type="button" className="read-more-button" onClick={() => toggleText(template.id)}>{isExpanded ? "عرض أقل" : "قراءة المزيد"}</button>}</div>
                 <div className="library-item-actions"><button type="button" onClick={() => copyValue(template.text, template.id)} aria-label="نسخ نص القالب">{copiedId === template.id ? <Check size={13} /> : <Clipboard size={13} />}<span>نسخ النص</span></button><button type="button" onClick={() => downloadMedia(template)} aria-label="تحميل القالب"><Download size={13} /><span>تحميل</span></button><button type="button" onClick={() => shareTemplate(template)} aria-label="مشاركة رابط القالب">{copiedId === `share-${template.id}` ? <Check size={13} /> : <Share2 size={13} />}<span>مشاركة</span></button>{isOwner && <button type="button" onClick={() => deleteTemplate(template.id)} aria-label="حذف القالب"><Trash2 size={13} /><span>حذف</span></button>}</div>
                 <div className="template-direct-link"><span>{templateUrl(template)}</span><button type="button" onClick={() => shareTemplate(template)}>نسخ الرابط</button></div>
