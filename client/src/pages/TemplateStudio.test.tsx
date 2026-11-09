@@ -50,7 +50,7 @@ describe("TemplateStudio interactive flow", () => {
     fireEvent.change(screen.getByLabelText("كلمة مرور القوالب"), { target: { value: "7705" } });
     fireEvent.click(screen.getByRole("button", { name: "فتح الإضافة" }));
 
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).toBeTruthy();
     const textArea = screen.getByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...");
     expect(screen.getByLabelText("قسم التصميم")).toBeTruthy();
@@ -66,7 +66,7 @@ describe("TemplateStudio interactive flow", () => {
     expect(mutate.mock.calls[0]?.[0]).toMatchObject({ category: "gemini-weddings" });
 
     fireEvent.click(screen.getByRole("button", { name: "إضافة قالب جديد" }));
-    const secondInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const secondInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     const secondTextArea = screen.getByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...");
     fireEvent.change(secondInput, { target: { files: [new File(["second"], "second.png", { type: "image/png" })] } });
     await waitFor(() => expect(screen.getByText(/second\.png/)).toBeTruthy());
@@ -114,4 +114,22 @@ describe("TemplateStudio interactive flow", () => {
     expect(screen.getByLabelText("كلمة مرور القوالب")).toBeTruthy();
     expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull();
   });
+  it("keeps an edited template when closing and confirms discarding explicitly", async () => {
+    window.sessionStorage.setItem("abu-kayan-templates-gemini-owner", "true");
+    const { container } = render(<TemplateStudio toolName="Gemini" toolLabel="Gemini" />);
+    fireEvent.click(screen.getByRole("button", { name: "فتح قالب 1" }));
+    const dialog = screen.getByRole("dialog", { name: "تعديل قالب محفوظ" });
+    expect(container.contains(dialog)).toBe(false);
+    fireEvent.change(screen.getByDisplayValue(longTemplateText), { target: { value: "مسودة لم أحفظها" } });
+    fireEvent.click(screen.getByRole("button", { name: "إغلاق تعديل قالب محفوظ" }));
+    expect(screen.getByRole("dialog", { name: "تعديلات القالب غير محفوظة" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "العودة إلى التحرير" }));
+    expect(screen.getByDisplayValue("مسودة لم أحفظها")).toBeTruthy();
+    expect(mutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "إغلاق تعديل قالب محفوظ" }));
+    fireEvent.click(screen.getByRole("button", { name: "مغادرة دون حفظ" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+  });
+
 });

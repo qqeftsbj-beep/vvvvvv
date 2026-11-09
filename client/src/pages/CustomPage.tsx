@@ -11,8 +11,8 @@ function CustomPageState({ children }: { children: ReactNode }) {
 
 export default function CustomPage() {
   const [, params] = useRoute("/custom/:slug");
-  const content = trpc.siteContent.get.useQuery(undefined, { staleTime: 0, refetchInterval: 5_000, refetchOnWindowFocus: true });
-  const site = normalizeSiteContent(content.data);
+  const content = trpc.siteContent.page.useQuery({ slug: params?.slug || "missing-page" }, { staleTime: 0, refetchInterval: 5_000, refetchOnWindowFocus: true });
+  const site = normalizeSiteContent(content.data ? { pages: [content.data.page], settings: content.data.settings, customCode: content.data.customCode } : null);
   const page = site.pages.find((item) => item.slug === params?.slug && isPublishedPage(item));
 
   if (content.isLoading && !content.data) return <CustomPageState><div className="custom-page-loading" role="status"><Loader2 className="animate-spin" size={24} /><span>جارٍ تحميل الصفحة...</span></div></CustomPageState>;

@@ -98,6 +98,27 @@ export const freeSites = mysqlTable("free_sites", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+/** Immutable page-scoped media objects; metadata may be edited but rows/keys are never replaced. */
+export const pageMediaFiles = mysqlTable("page_media_files", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  pageId: varchar("pageId", { length: 128 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  originalName: varchar("originalName", { length: 255 }).notNull(),
+  folder: varchar("folder", { length: 160 }).default("").notNull(),
+  description: text("description").notNull(),
+  mimeType: varchar("mimeType", { length: 255 }).notNull(),
+  size: int("size").notNull(),
+  key: text("key").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/** Owner-only autosave working copy; the parent persistence layer owns its API. */
+export const ownerEditorDrafts = mysqlTable("owner_editor_drafts", {
+  id: int("id").primaryKey(),
+  contentJson: mediumtext("contentJson").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type TemplateCategory = typeof templateCategories.$inferSelect;
@@ -112,3 +133,7 @@ export type SiteSettings = typeof siteSettings.$inferSelect;
 export type SiteContentVersion = typeof siteContentVersions.$inferSelect;
 export type CreativeCategory = typeof creativeCategories.$inferSelect;
 export type InsertCreativeCategory = typeof creativeCategories.$inferInsert;
+export type PageMediaFile = typeof pageMediaFiles.$inferSelect;
+export type InsertPageMediaFile = typeof pageMediaFiles.$inferInsert;
+export type OwnerEditorDraft = typeof ownerEditorDrafts.$inferSelect;
+export type InsertOwnerEditorDraft = typeof ownerEditorDrafts.$inferInsert;

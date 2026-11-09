@@ -19,6 +19,8 @@ import OwnerTemplateCategories from "./OwnerTemplateCategories";
 import OwnerButtons from "./OwnerButtons";
 import OwnerPages from "./OwnerPages";
 import OwnerBackups from "./OwnerBackups";
+import OwnerModal from "@/components/OwnerModal";
+import { useUnsavedNavigation, type LeaveRequest } from "@/hooks/useUnsavedNavigation";
 import "./OwnerPanel.mobile.css";
 
 const DEFAULT_OWNER_PIN = "770562";
@@ -63,12 +65,25 @@ export default function OwnerPanel() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activePanelTab, setActivePanelTab] = useState("identity");
   const [saveError, setSaveError] = useState("");
-  const [leaveAction, setLeaveAction] = useState<{ url?: string; logout?: boolean } | null>(null);
+  const [leaveAction, setLeaveAction] = useState<LeaveRequest | null>(null);
+  const [uploadsBusy, setUploadsBusy] = useState(false);
+  const [autoDraft, setAutoDraft] = useState(true);
+  const [draftState, setDraftState] = useState("");
+  const [recoverable, setRecoverable] = useState<{ content: SiteContent; savedAt: number } | null>(null);
+  const [adminContent, setAdminContent] = useState<Record<string, unknown> | null>(null);
+  const [remoteDraft, setRemoteDraft] = useState<{ content: Record<string, unknown>; savedAt: number } | null>(null);
+  const [remoteDraftLoaded, setRemoteDraftLoaded] = useState(false);
+  const savingRef = useRef(false);
+  const recoveredRef = useRef(false);
   const contentRef = useRef(content); contentRef.current = content;
   const savedRef = useRef(savedSnapshot); savedRef.current = savedSnapshot;
   const { theme, toggleTheme } = useTheme();
   const { isAuthenticated } = useAuth();
   const siteContentQuery = trpc.siteContent.get.useQuery(undefined, { refetchOnWindowFocus: false });
+  const adminContentLoad = trpc.siteContent.adminGet.useMutation();
+  const workingDraftLoad = trpc.siteContent.workingDraft.useMutation();
+  const workingDraftSave = trpc.siteContent.saveWorkingDraft.useMutation();
+  const workingDraftClear = trpc.siteContent.clearWorkingDraft.useMutation();
   const siteContentSave = trpc.siteContent.save.useMutation();
   const ownerSearchQuery = trpc.ownerSearch.query.useQuery({ term: searchTerm.trim(), page: 1, pageSize: 20 }, { enabled: unlocked && searchTerm.trim().length >= 2, staleTime: 1000, refetchOnWindowFocus: false });
   const recycleQuery = trpc.templates.recycleBin.useQuery(undefined, { enabled: unlocked && isAuthenticated, refetchOnWindowFocus: false });
@@ -80,7 +95,18 @@ export default function OwnerPanel() {
   const setRetentionMutation = trpc.templates.setRetentionDays.useMutation({ onSuccess: () => { utils.templates.retentionDays.invalidate(); toast.success("تم حفظ مدة الاحتفاظ في قاعدة البيانات."); } });
 
   useEffect(() => setUnlocked(window.sessionStorage.getItem("abu-kayan-owner-panel") === "true"), []);
-  useEffect(() => { if (siteContentQuery.data && JSON.stringify(contentRef.current) === savedRef.current) { const next = normalizeSiteContent(siteContentQuery.data); setContent(next); setSavedSnapshot(JSON.stringify(next)); } }, [siteContentQuery.data]);
+  useEffect(() => {
+    if (!unlocked) return;
+    let cancelled = false;
+    void Promise.all([adminContentLoad.mutateAsync({ ownerPin: getOwnerPin() }), workingDraftLoad.mutateAsync({ ownerPin: getOwnerPin() })]).then(([site, draft]) => {
+      if (cancelled) return;
+      setAdminContent(site);
+      setRemoteDraft(draft);
+      setRemoteDraftLoaded(true);
+    }).catch(error => { if (!cancelled) toast.error(error instanceof Error ? error.message : "تعذر تحميل بيانات المالك."); });
+    return () => { cancelled = true; };
+  }, [unlocked]);
+  useEffect(() => { const data = unlocked ? adminContent : siteContentQuery.data; if (data && JSON.stringify(contentRef.current) === savedRef.current) { const next = normalizeSiteContent(data); setContent(next); setSavedSnapshot(JSON.stringify(next)); } }, [siteContentQuery.data, adminContent, unlocked]);
   const hasUnsavedChanges = useMemo(() => JSON.stringify(content) !== savedSnapshot, [content, savedSnapshot]);
   const localSearchResults = useMemo(() => {
     const term = searchTerm.trim().toLocaleLowerCase();
@@ -94,12 +120,32 @@ export default function OwnerPanel() {
       ...(matches(content.settings.fontFamily) || matches(content.settings.themeMode) ? [{ id: "settings", title: "إعدادات المظهر", subtitle: "الخطوط والألوان والوضع", section: "appearance" as const }] : []),
     ].slice(0, 12);
   }, [content, searchTerm]);
+  const navigationGuard = useUnsavedNavigation(hasUnsavedChanges || uploadsBusy, setLeaveAction);
   useEffect(() => {
-    if (!hasUnsavedChanges) { window.onbeforeunload = null; return; }
-    const handler = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [hasUnsavedChanges]);
+    if (!unlocked || recoveredRef.current || !adminContent) return;
+    let local: { content: SiteContent; savedAt: number } | null = null;
+    try { local = JSON.parse(localStorage.getItem("abu-kayan-owner-working-draft") || "null"); } catch { /* Ignore invalid recovery data only. */ }
+    const remote = remoteDraft ? { content: normalizeSiteContent(remoteDraft.content), savedAt: remoteDraft.savedAt } : null;
+    const candidate = local && (!remote || local.savedAt > remote.savedAt) ? local : remote;
+    if (!candidate && !remoteDraftLoaded) return;
+    recoveredRef.current = true;
+    if (candidate && JSON.stringify(candidate.content) !== JSON.stringify(normalizeSiteContent(adminContent))) setRecoverable(candidate);
+  }, [unlocked, adminContent, remoteDraft, remoteDraftLoaded]);
+  useEffect(() => {
+    if (!unlocked || !hasUnsavedChanges) return;
+    // Browser-local recovery is immediate and never publishes changes.
+    try { localStorage.setItem("abu-kayan-owner-working-draft", JSON.stringify({ content, savedAt: Date.now() })); } catch { setDraftState("تعذر حفظ نسخة محلية؛ احفظ المسودة في الخادم."); }
+    if (!autoDraft || uploadsBusy || savingRef.current || recoverable) return;
+    const timeout = window.setTimeout(async () => {
+      setDraftState("جارٍ حفظ مسودة خاصة غير منشورة...");
+      try {
+        const result = await workingDraftSave.mutateAsync({ ownerPin: getOwnerPin(), content: content as unknown as Record<string, unknown> });
+        if (!result.success) throw new Error("لم يُؤكد حفظ المسودة.");
+        setDraftState("حُفظت مسودة استرداد خاصة في قاعدة البيانات — لم تُنشر.");
+      } catch (error) { setDraftState(`تعذر حفظ المسودة تلقائيًا: ${error instanceof Error ? error.message : "خطأ اتصال"}. نسختك المحلية محفوظة.`); }
+    }, 1800);
+    return () => clearTimeout(timeout);
+  }, [content, unlocked, hasUnsavedChanges, autoDraft, uploadsBusy, recoverable]);
 
   const unlock = () => {
     if (pin === getOwnerPin()) {
@@ -122,7 +168,7 @@ export default function OwnerPanel() {
     for (const oldPage of current.pages) { const renamed = pages.find((page) => page.id === oldPage.id); if (renamed && renamed.slug !== oldPage.slug) next = updatePageSlugReferences(next, oldPage.slug, renamed.slug); }
     return next;
   });
-  const createPageButton = (page: EditablePage) => { setContent((current) => ({ ...current, buttons: [...current.buttons, { id: crypto.randomUUID(), label: page.title, action: "custom-page", url: `/custom/${page.slug}`, placement: "hero", visible: true, icon: "arrow", order: current.buttons.length + 1 }] })); setActivePanelTab("buttons"); toast("تم إنشاء الزر وربطه بالصفحة. احفظ التعديلات لتزامن الربط."); };
+  const createPageButton = (page: EditablePage, placement: EditableButton["placement"] = "hero") => { setContent((current) => ({ ...current, buttons: [...current.buttons, { id: crypto.randomUUID(), label: page.title, action: "custom-page", url: `/custom/${page.slug}`, placement, visible: true, icon: "arrow", order: current.buttons.length + 1 }] })); setActivePanelTab("buttons"); toast("تم إنشاء الزر وربطه بالصفحة. احفظ التعديلات لتزامن الربط."); };
   const update = <K extends keyof SiteContent>(key: K, value: SiteContent[K]) => setContent((current) => ({ ...current, [key]: value }));
   const updateSetting = <K extends keyof SiteContent["settings"]>(key: K, value: SiteContent["settings"][K]) => setContent((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
   useEffect(() => {
@@ -166,27 +212,38 @@ export default function OwnerPanel() {
   };
 
   const persist = async (next: SiteContent = contentRef.current): Promise<boolean> => {
+    if (uploadsBusy) { toast.error("انتظر اكتمال رفع الملفات قبل الحفظ أو المغادرة."); return false; }
+    if (savingRef.current) return false;
     const validation = validateSitePages(next.pages);
     if (!validation.valid) { const message = validation.errors[0].message; setSaveError(message); toast.error(message); return false; }
     const sent = JSON.stringify(next);
     setSaveError("");
+    savingRef.current = true;
     try {
       const result = await siteContentSave.mutateAsync({ ownerPin: getOwnerPin(), content: next as unknown as Record<string, unknown> });
       if (!result.success || !result.content) throw new Error("لم يؤكد الخادم تخزين التعديلات.");
       const confirmed = normalizeSiteContent(result.content);
       saveSiteContent(confirmed);
+      const noNewEdits = JSON.stringify(contentRef.current) === sent;
+      savedRef.current = JSON.stringify(confirmed);
+      if (noNewEdits) contentRef.current = confirmed;
       setSavedSnapshot(JSON.stringify(confirmed));
       setContent((current) => JSON.stringify(current) === sent ? confirmed : current);
       if (confirmed.settings.themeMode !== theme) toggleTheme();
       if (isAuthenticated) setRetentionMutation.mutate({ retentionDays: confirmed.settings.recycleRetentionDays });
-      await utils.siteContent.get.invalidate();
+      await Promise.resolve(utils.siteContent.get.invalidate()).catch(() => undefined);
+      if (noNewEdits) {
+        localStorage.removeItem("abu-kayan-owner-working-draft");
+        setDraftState("");
+        void workingDraftClear.mutateAsync({ ownerPin: getOwnerPin() }).catch(() => undefined);
+      }
       toast.success("تم تأكيد حفظ التعديلات في قاعدة البيانات ومزامنتها للجميع.");
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "تعذر الحفظ المركزي.";
       setSaveError(`${message} — التعديلات ما زالت في اللوحة ولم تُفقد. حاول مجددًا.`);
       toast.error(message); return false;
-    }
+    } finally { savingRef.current = false; }
   };
   const save = () => { void persist(); };
   const changePassword = () => {
@@ -203,14 +260,15 @@ export default function OwnerPanel() {
     setContent(withExtensions); contentRef.current = withExtensions;
     return persist(withExtensions);
   };
-  const completeLeave = (action: { url?: string; logout?: boolean }) => { setLeaveAction(null); if (action.logout) logoutNow(); else if (action.url) window.location.assign(action.url); };
+  const completeLeave = (action: LeaveRequest) => { setLeaveAction(null); if (action.logout) logoutNow(); else navigationGuard.allowLeave(action); };
+  const commitPages = async (pages: EditablePage[]) => { const next = { ...contentRef.current, pages }; setContent(next); contentRef.current = next; return persist(next); };
   const captureNavigation = (event: React.MouseEvent<HTMLElement>) => {
     const anchor = (event.target as HTMLElement).closest("a[href]");
     const url = anchor?.getAttribute("href");
     if (hasUnsavedChanges && url && !url.startsWith("#") && anchor?.getAttribute("target") !== "_blank") { event.preventDefault(); event.stopPropagation(); setLeaveAction({ url }); }
   };
   const openSearchResult = (result: NonNullable<typeof ownerSearchQuery.data>["items"][number]) => {
-    if (result.url) { window.location.href = result.url; return; }
+    if (result.url) { if (hasUnsavedChanges || uploadsBusy) setLeaveAction({ url: result.url }); else window.location.assign(result.url); return; }
     const sectionId = result.section === "free-sites" ? "owner-free-sites" : result.section === "creative" ? "owner-creative-submissions" : "owner-creative-categories";
     setActivePanelTab(result.section === "free-sites" ? "free-sites" : result.section === "creative" ? "submissions" : "creative-categories");
     const section = document.getElementById(sectionId) as HTMLDetailsElement | null;
@@ -223,8 +281,9 @@ export default function OwnerPanel() {
 
   return <main dir="rtl" className="owner-page owner-tabbed" onClickCapture={captureNavigation}>
     <header className="owner-header"><div><span className="studio-label">أبو كيان الجنيد · محرر شامل</span><h1>لوحة التحكم</h1></div><div className="owner-header-actions"><button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><Link href="/" className="owner-back"><ArrowRight size={15} /> معاينة الموقع</Link><button type="button" className="owner-logout" onClick={logout}><LogOut size={15} /> إغلاق</button></div></header>
-    <div className={`owner-save-bar ${hasUnsavedChanges ? "is-dirty" : "is-clean"}`}><div><strong>{hasUnsavedChanges ? "لديك تعديلات غير محفوظة" : "كل التعديلات محفوظة"}</strong><small>{hasUnsavedChanges ? "احفظ قبل مغادرة اللوحة حتى تظهر التغييرات لجميع الأجهزة." : "المزامنة الأخيرة مؤكدة من قاعدة البيانات."}</small></div><button type="button" className="owner-save" onClick={save} disabled={!hasUnsavedChanges || siteContentSave.isPending}><Save size={16} /> {siteContentSave.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}</button></div>
+    <div className={`owner-save-bar ${hasUnsavedChanges ? "is-dirty" : "is-clean"}`}><div><strong>{siteContentSave.isPending ? "جارٍ الحفظ..." : saveError ? "فشل الحفظ — يمكنك إعادة المحاولة" : uploadsBusy ? "جارٍ رفع الملفات — لا تغادر" : hasUnsavedChanges ? "لديك تعديلات غير محفوظة" : "كل التعديلات محفوظة"}</strong><small>{hasUnsavedChanges ? "احفظ قبل مغادرة اللوحة حتى تظهر التغييرات لجميع الأجهزة." : "المزامنة الأخيرة مؤكدة من قاعدة البيانات."}</small></div><button type="button" className="owner-save" onClick={save} disabled={!hasUnsavedChanges || siteContentSave.isPending || uploadsBusy}><Save size={16} /> {siteContentSave.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}</button></div>
     <nav className="owner-tabs" role="tablist" aria-label="أقسام لوحة التحكم">{[{ id: "identity", label: "الموقع العام" }, { id: "appearance", label: "الألوان والخطوط" }, { id: "security", label: "الأمان" }, { id: "services", label: "الخدمات والمنتجات" }, { id: "buttons", label: "الأزرار" }, { id: "pages", label: "إدارة الصفحات" }, { id: "free-sites", label: "المواقع المجانية" }, { id: "submissions", label: "المشاركات" }, { id: "creative-categories", label: "أقسام الإبداع" }, { id: "template-gemini", label: "تصاميم Gemini" }, { id: "template-chat", label: "تصاميم الأطفال" }, { id: "code", label: "الأكواد المخصصة" }, { id: "backup", label: "النسخ الاحتياطية" }].map((tab) => <button type="button" role="tab" id={`owner-tab-${tab.id}`} aria-selected={activePanelTab === tab.id} aria-controls={({"identity":"owner-identity","appearance":"owner-appearance","security":"owner-security","services":"owner-services","buttons":"owner-buttons","pages":"owner-pages","free-sites":"owner-free-sites","submissions":"owner-creative-submissions","creative-categories":"owner-creative-categories","template-gemini":"owner-template-categories-gemini","template-chat":"owner-template-categories-chat","code":"owner-code-panel","backup":"owner-recycle-panel"} as Record<string, string>)[tab.id]} key={tab.id} onClick={() => setActivePanelTab(tab.id)}>{tab.label}</button>)}</nav>
+    <section className="owner-draft-status"><label><input type="checkbox" checked={autoDraft} onChange={e => setAutoDraft(e.target.checked)} /> حفظ تلقائي لمسودة استرداد خاصة (لا ينشر الصفحات)</label>{draftState && <small role="status">{draftState}</small>}{recoverable && <div role="status"><strong>توجد مسودة عمل لم تُعتمد بعد.</strong><button type="button" onClick={() => { setContent(recoverable.content); setRecoverable(null); toast("تم استرجاع المسودة؛ عاينها ثم احفظ للاعتماد."); }}>استعادة المسودة</button><button type="button" onClick={() => { setRecoverable(null); localStorage.removeItem("abu-kayan-owner-working-draft"); void workingDraftClear.mutateAsync({ ownerPin: getOwnerPin() }); }}>تجاهل مسودة الاسترداد</button></div>}</section>
     {saveError && <div role="alert" className="owner-save-error">{saveError}</div>}
     <section className="owner-search-panel" aria-label="البحث الشامل"><div className="owner-search-heading"><div><span className="studio-label">بحث سريع</span><strong>ابحث في محتوى الموقع كله</strong></div><Search size={18} /></div><div className="owner-search-input"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="ابحث في الأقسام، الأزرار، القوالب، المواقع والمشاركات..." aria-label="البحث الشامل" />{searchTerm && <button type="button" onClick={() => setSearchTerm("")} aria-label="مسح البحث"><X size={15} /></button>}</div>{searchTerm.trim().length === 1 && <small className="owner-search-hint">اكتب حرفين على الأقل لبدء البحث.</small>}{searchTerm.trim().length >= 2 && <div className="owner-search-results">{localSearchResults.map((result) => <button type="button" className="owner-search-result" key={`local-${result.id}`} onClick={() => openLocalSearchResult(result.section)}><span><strong>{result.title}</strong><small>{result.subtitle}</small></span><em>إعداد الموقع</em></button>)}{ownerSearchQuery.isLoading && <span className="owner-search-empty">جارٍ البحث...</span>}{!ownerSearchQuery.isLoading && !ownerSearchQuery.data?.items.length && !localSearchResults.length && <span className="owner-search-empty">لا توجد نتائج مطابقة.</span>}{ownerSearchQuery.data?.items.map((result) => <button type="button" className="owner-search-result" key={`${result.kind}-${result.id}`} onClick={() => openSearchResult(result)}><span><strong>{result.title}</strong><small>{result.subtitle}</small></span><em>{result.kind === "template" ? "قالب" : result.kind === "free-site" ? "موقع" : result.kind === "submission" ? "مشاركة" : "قسم"}</em></button>)}{ownerSearchQuery.data?.hasMore && <small className="owner-search-hint">توجد نتائج إضافية؛ ضيّق عبارة البحث لنتيجة أدق.</small>}</div>}</section>
 
@@ -279,7 +338,7 @@ export default function OwnerPanel() {
     </div></section></details>
 
     <details id="owner-buttons" className="owner-panel-section" hidden={activePanelTab !== "buttons"} open={activePanelTab === "buttons"} role="tabpanel" aria-labelledby="owner-tab-buttons"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>05</span><strong>إدارة الأزرار</strong><small>الوجهات، ترتيب الظهور، والمظهر</small></summary><OwnerButtons buttons={content.buttons} pages={content.pages} settings={content.settings} onChange={(buttons) => update("buttons", buttons)} /></details>
-    <details id="owner-pages" className="owner-panel-section" hidden={activePanelTab !== "pages"} open={activePanelTab === "pages"} role="tabpanel" aria-labelledby="owner-tab-pages"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>06</span><strong>إدارة الصفحات</strong><small>صفحات مستقلة، معاينة، أكواد وروابط</small></summary><OwnerPages pages={content.pages} site={content} onChange={changePages} onCreateButton={createPageButton} /></details>
+    <details id="owner-pages" className="owner-panel-section" hidden={activePanelTab !== "pages"} open={activePanelTab === "pages"} role="tabpanel" aria-labelledby="owner-tab-pages"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>06</span><strong>إدارة الصفحات</strong><small>صفحات مستقلة، معاينة، أكواد وروابط</small></summary><OwnerPages pages={content.pages} site={content} onChange={changePages} onCreateButton={createPageButton} ownerPin={getOwnerPin()} onCommit={commitPages} onBusyChange={setUploadsBusy} /></details>
 
     <details id="owner-free-sites" className="owner-panel-section" hidden={activePanelTab !== "free-sites"} open={activePanelTab === "free-sites"} role="tabpanel" aria-labelledby="owner-tab-free-sites"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>06</span><strong>المواقع والخدمات المجانية</strong><small>إدارة الدليل والصور والظهور</small></summary><OwnerFreeSites unlocked={unlocked} /></details>
 
@@ -294,6 +353,6 @@ export default function OwnerPanel() {
     <details id="owner-code-panel" className="owner-panel-section" hidden={activePanelTab !== "code"} open={activePanelTab === "code"} role="tabpanel" aria-labelledby="owner-tab-code"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>11</span><strong>الإعدادات البرمجية</strong><small>إدارة الإعدادات القابلة للتطبيق بأمان</small></summary><OwnerCodeWorkspace content={content} onApply={applyCodeSettings} /></details>
 
     <details id="owner-recycle-panel" className="owner-panel-section" hidden={activePanelTab !== "backup"} open={activePanelTab === "backup"} role="tabpanel" aria-labelledby="owner-tab-backup"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>12</span><strong>النسخ الاحتياطية وسلة المحذوفات</strong><small>حفظ واستعادة إعدادات الموقع والقوالب المحذوفة</small></summary><OwnerBackups ownerPin={getOwnerPin()} onRestore={(next) => { setContent(next); toast("حُمّلت النسخة كمسودة. اضغط حفظ التعديلات للاعتماد."); }} /><section className="owner-services-card recycle-bin-card"><div className="owner-card-heading"><div><span className="studio-label">06 / سلة المحذوفات</span><h2>استعادة القوالب المحذوفة</h2></div><Trash2 size={20} /></div><p className="owner-security-note">تُنقل القوالب المحذوفة إلى هنا أولًا. اختر مدة الاحتفاظ من إعدادات الشكل، ثم اضغط التفريغ لحذف ما تجاوز المدة نهائيًا.</p>{!isAuthenticated ? <div className="recycle-login"><p>يلزم تسجيل دخول حساب المالك لإدارة القوالب المشتركة.</p><button type="button" className="owner-save" onClick={startLogin}><LockKeyhole size={16} /> تسجيل دخول المالك</button></div> : <><div className="recycle-toolbar"><span>{recycleQuery.isLoading ? "جارٍ التحميل..." : `${recycleQuery.data?.length || 0} قالب في السلة`}</span><button type="button" className="owner-add" disabled={cleanupMutation.isPending || !recycleQuery.data?.length} onClick={() => cleanupMutation.mutate({ retentionDays: content.settings.recycleRetentionDays })}><Trash2 size={15} /> تفريغ المنتهية</button></div><div className="recycle-list">{!recycleQuery.data?.length && !recycleQuery.isLoading && <p className="owner-empty">سلة المحذوفات فارغة.</p>}{recycleQuery.data?.map((item) => <div className="recycle-row" key={item.id}><div><strong>{item.imageName}</strong><small>{item.tool} · حُذف في {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString("ar-YE") : "—"}</small></div><div className="recycle-actions"><button type="button" className="owner-add" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate({ id: item.id })}><RotateCcw size={14} /> استعادة</button><button type="button" className="owner-delete" disabled={purgeMutation.isPending} onClick={() => { if (window.confirm("حذف نهائي؟ لا يمكن التراجع عن هذا الإجراء.")) purgeMutation.mutate({ id: item.id }); }}><Trash2 size={14} /> حذف نهائي</button></div></div>)}</div></>}</section></details>
-    {leaveAction && <div className="owner-navigation-modal" role="dialog" aria-modal="true" aria-label="تعديلات غير محفوظة"><div className="owner-navigation-card"><h2>هل تحفظ التعديلات قبل المغادرة؟</h2><p>توجد تغييرات لم يُؤكد حفظها في قاعدة البيانات.</p><div className="owner-item-toolbar"><button type="button" className="owner-save" disabled={siteContentSave.isPending} onClick={async () => { if (await persist()) completeLeave(leaveAction); }}>حفظ ومغادرة</button><button type="button" className="owner-delete" onClick={() => { setContent(JSON.parse(savedSnapshot)); completeLeave(leaveAction); }}>مغادرة دون حفظ</button><button type="button" className="owner-add" onClick={() => setLeaveAction(null)}>البقاء في الصفحة</button></div>{saveError && <p role="alert">{saveError}</p>}</div></div>}
+    <OwnerModal open={Boolean(leaveAction)} onClose={() => setLeaveAction(null)} title="تعديلات غير محفوظة" closeDisabled={siteContentSave.isPending || uploadsBusy}><h3>هل تحفظ التعديلات قبل المغادرة؟</h3><p>توجد تغييرات لم يُؤكد اعتمادها. المسودة التلقائية لا تنشر الصفحة.</p><div className="owner-item-toolbar"><button type="button" className="owner-save" disabled={siteContentSave.isPending || uploadsBusy} onClick={async () => { const action = leaveAction; if (await persist() && action && JSON.stringify(contentRef.current) === savedRef.current) completeLeave(action); }}>حفظ ومغادرة</button><button type="button" className="owner-delete" disabled={siteContentSave.isPending || uploadsBusy} onClick={() => { const action = leaveAction; setContent(JSON.parse(savedSnapshot)); localStorage.removeItem("abu-kayan-owner-working-draft"); void workingDraftClear.mutateAsync({ ownerPin: getOwnerPin() }).catch(() => undefined); if (action) completeLeave(action); }}>مغادرة دون حفظ</button><button type="button" className="owner-add" onClick={() => setLeaveAction(null)}>البقاء في الصفحة</button></div>{uploadsBusy && <p role="status">انتظر اكتمال رفع الملفات؛ لن يتم فقدانها أثناء المغادرة.</p>}{saveError && <p role="alert">{saveError}</p>}</OwnerModal>
   </main>;
 }

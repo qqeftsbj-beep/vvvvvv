@@ -1,3 +1,4 @@
+import type { PageMedia } from "@shared/pageMedia";
 /*
   Shared editable site model for the owner control room.
   Every visual value is explicit so the preview can be changed without code edits.
@@ -87,7 +88,19 @@ export type EditablePage = {
   /** New pages set this false; omitted means preserve legacy site customCode behavior. */
   useLegacyCustomCode?: boolean;
   blocks?: EditablePageBlock[];
+  renderMode?: "blocks" | "code";
+  media?: PageMedia[];
+  folders?: string[];
+  order?: number;
+  showDownloads?: boolean;
+  navItems?: Array<{ id: string; label: string }>;
+  footerText?: string;
+  draft?: PageDraft;
+  publishedAt?: number;
+  draftSavedAt?: number;
 };
+
+export type PageDraft = Omit<EditablePage, "draft">;
 
 export type EditablePageBlock = {
   id: string;

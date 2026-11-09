@@ -1,17 +1,23 @@
 // @vitest-environment jsdom
 import React, { type ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { saveRemote, saveDraft, clearDraft } = vi.hoisted(() => ({ saveRemote: vi.fn(), saveDraft: vi.fn(), clearDraft: vi.fn() }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     siteContent: {
       get: { useQuery: () => ({ data: null, isLoading: false }) },
-      save: { useMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }) },
+      adminGet: { useMutation: () => ({ mutateAsync: vi.fn().mockResolvedValue(null), isPending: false }) },
+      workingDraft: { useMutation: () => ({ mutateAsync: vi.fn().mockResolvedValue(null), isPending: false }) },
+      saveWorkingDraft: { useMutation: () => ({ mutateAsync: saveDraft, isPending: false }) },
+      clearWorkingDraft: { useMutation: () => ({ mutateAsync: clearDraft, isPending: false }) },
+      save: { useMutation: () => ({ mutate: vi.fn(), mutateAsync: saveRemote, isPending: false }) },
       history: { useQuery: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }) },
       backup: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       version: { useQuery: () => ({ data: null, isLoading: false }) },
     },
+    pageMedia: { upload: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) } },
     ownerSearch: { query: { useQuery: () => ({ data: { items: [], hasMore: false }, isLoading: false }) } },
     templates: {
       recycleBin: { useQuery: () => ({ data: null, isLoading: false }) }, retentionDays: { useQuery: () => ({ data: null, isLoading: false }) },
@@ -38,8 +44,12 @@ vi.mock("./OwnerCodeWorkspace", () => ({ default: () => <div data-testid="code-a
 import OwnerPanel from "./OwnerPanel";
 
 describe("OwnerPanel organization", () => {
-  beforeEach(() => { sessionStorage.setItem("abu-kayan-owner-panel", "true"); });
-  afterEach(() => { cleanup(); sessionStorage.clear(); });
+  beforeEach(() => { localStorage.clear(); sessionStorage.setItem("abu-kayan-owner-panel", "true");
+    saveRemote.mockReset(); saveRemote.mockImplementation(async (input) => ({ success: true, content: input.content }));
+    saveDraft.mockReset(); saveDraft.mockResolvedValue({ success: true, savedAt: Date.now() });
+    clearDraft.mockReset(); clearDraft.mockResolvedValue({ success: true });
+  });
+  afterEach(() => { cleanup(); sessionStorage.clear(); localStorage.clear(); });
 
   it("shows named sections with a compact tabbed organizer", () => {
     render(<OwnerPanel />);
@@ -63,4 +73,35 @@ describe("OwnerPanel organization", () => {
     expect(screen.getByText("لديك تعديلات غير محفوظة")).toBeTruthy();
     expect((screen.getByRole("button", { name: /حفظ التعديلات/ }) as HTMLButtonElement).disabled).toBe(false);
   });
+  it("confirms saving on the server before clearing dirty state", async () => {
+    render(<OwnerPanel />);
+    fireEvent.change(screen.getByDisplayValue("نخلي فكرتك"), { target: { value: "عنوان محفوظ للجميع" } });
+    fireEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }));
+    await waitFor(() => expect(saveRemote).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("كل التعديلات محفوظة")).toBeTruthy());
+    expect(saveRemote.mock.calls[0][0].content.heroTitle).toBe("عنوان محفوظ للجميع");
+  });
+  it("retains edited values and supports retry after a save failure", async () => {
+    saveRemote.mockRejectedValueOnce(new Error("تعذر اتصال قاعدة البيانات"));
+    render(<OwnerPanel />);
+    fireEvent.change(screen.getByDisplayValue("نخلي فكرتك"), { target: { value: "لا تفقد هذا التعديل" } });
+    fireEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("تعذر اتصال"));
+    expect(screen.getByDisplayValue("لا تفقد هذا التعديل")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }));
+    await waitFor(() => expect(screen.getByText("كل التعديلات محفوظة")).toBeTruthy());
+  });
+  it("guards leaving and allows staying without discarding edits", () => {
+    const { container } = render(<OwnerPanel />);
+    fireEvent.change(screen.getByDisplayValue("نخلي فكرتك"), { target: { value: "مسودة خروج" } });
+    fireEvent.click(screen.getByRole("button", { name: "إغلاق" }));
+    const dialog = screen.getByRole("dialog", { name: "تعديلات غير محفوظة" });
+    expect(container.contains(dialog)).toBe(false);
+    expect(screen.getByRole("button", { name: "حفظ ومغادرة" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "مغادرة دون حفظ" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "البقاء في الصفحة" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByDisplayValue("مسودة خروج")).toBeTruthy();
+  });
+
 });

@@ -77,3 +77,5 @@ html.light .owner-tabbed{--owner-surface:#fffdf8;--owner-ink:#17243a}
  .owner-tabbed .owner-main-card,.owner-tabbed .owner-side-card{padding:12px}
 }
 @media(prefers-reduced-motion:no-preference){.owner-tabbed .owner-tabs{scroll-behavior:smooth}}
+
+.owner-tabbed .owner-draft-status{display:grid;gap:8px;padding:10px 14px;background:#0d1d35;border:1px solid #294366;border-radius:10px;margin:12px 0;font-size:12px;color:#e8d8b0}.owner-tabbed .owner-draft-status>label{display:flex;align-items:center;gap:8px}.owner-tabbed .owner-draft-status input[type=checkbox]{width:18px;height:18px;flex-shrink:0;accent-color:#d9b86c}.owner-tabbed .owner-draft-status>small{color:#a9c8e7;line-height:1.7}.owner-tabbed .owner-draft-status>div{display:flex;align-items:center;flex-wrap:wrap;gap:10px}.owner-tabbed .owner-draft-status button{border:1px solid #d9b86c77;border-radius:7px;background:#172c49;color:#f7f3ea;padding:8px 10px;min-height:40px}.owner-tabbed .owner-save-bar:has(button:disabled) small{overflow-wrap:anywhere}

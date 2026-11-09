@@ -28,6 +28,7 @@ import { trpc } from "@/lib/trpc";
 import { loadSiteContent } from "@/lib/siteContent";
 import { useTheme } from "@/contexts/ThemeContext";
 import CategoryStrip from "@/components/CategoryStrip";
+import OwnerModal from "@/components/OwnerModal";
 import "./TemplateStudio.css";
 
 type MediaType = "image" | "video";
@@ -126,6 +127,21 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const [editorVisible, setEditorVisible] = useState(false);
   const [templatePassword, setTemplatePassword] = useState(() => loadSiteContent().settings.templatePassword);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [confirmTemplateClose, setConfirmTemplateClose] = useState(false);
+  const draftBaseline = useRef(JSON.stringify(["", "", "", "image", "other"]));
+  const draftSignature = JSON.stringify([text, mediaData, mediaName, mediaType, draftCategory]);
+  const templateDirty = isOwner && editorVisible && draftSignature !== draftBaseline.current;
+  const closeEditor = () => {
+    if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
+    if (templateDirty) { setConfirmTemplateClose(true); return; }
+    setEditorVisible(false);
+  };
+  useEffect(() => {
+    if (!templateDirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [templateDirty]);
 
   useEffect(() => setIsOwner(window.sessionStorage.getItem(`${storageKey}-owner`) === "true"), [storageKey]);
 
@@ -169,6 +185,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     setMediaName("");
     setMediaType("image");
     setDraftCategory(visibleCategories[0]?.slug || "other");
+    draftBaseline.current = JSON.stringify(["", "", "", "image", visibleCategories[0]?.slug || "other"]);
     if (uploadInputRef.current) uploadInputRef.current.value = "";
   };
 
@@ -186,6 +203,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const lockOwner = () => {
+    if (templateDirty) { setConfirmTemplateClose(true); return; }
     setIsOwner(false);
     setEditorVisible(false);
     window.sessionStorage.removeItem(`${storageKey}-owner`);
@@ -194,6 +212,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const openCreator = () => {
+    if (editorVisible && templateDirty) return closeEditor();
     resetEditor();
     setEditorVisible(true);
     if (isOwner) toast("المحرر جاهز لإضافة قالب جديد.");
@@ -226,12 +245,12 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       const newMedia = mediaData.startsWith("data:") ? { mediaData } : {};
       updateTemplateMutation.mutate(
         { id: activeTemplate.serverId, category: draftCategory, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName, ownerPassword: templatePassword },
-        { onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: (error) => toast.error(error.message || "تعذر تحديث القالب المشترك.") },
+        { onSuccess: () => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: (error) => toast.error(error.message || "تعذر تحديث القالب المشترك.") },
       );
       return;
     }
     createTemplateMutation.mutate(payload, {
-      onSuccess: () => { setEditorVisible(false); resetEditor(); toast.success("تمت إضافة القالب إلى المكتبة المشتركة."); },
+      onSuccess: () => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); toast.success("تمت إضافة القالب إلى المكتبة المشتركة."); },
       onError: (error) => toast.error(error.message || "تعذر حفظ القالب المشترك. حاول مرة أخرى."),
     });
   };
@@ -245,6 +264,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       setMediaName(template.mediaName);
       setMediaType(template.mediaType);
       setDraftCategory(template.category);
+      draftBaseline.current = JSON.stringify([template.text, template.mediaData, template.mediaName, template.mediaType, template.category]);
     }
   };
 
@@ -334,9 +354,9 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     <header className="studio-header"><Link href="/" className="studio-back"><ArrowRight size={17} /> العودة للموقع</Link><div className="studio-header-actions"><button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><div className="studio-brand"><Sparkles size={17} /> أبو كيان الجنيد</div></div></header>
     <section className="studio-hero"><div className="studio-kicker"><span /> مساحة {toolLabel}</div><h1>مكتبة تصاميم<br /><em>تتوسع معك.</em></h1><p>تصفح القوالب المنشورة، وانسخ النص أو حمّل الملف من البطاقة. لإضافة قالب جديد استخدم الزر العلوي وأدخل كلمة المرور.</p><div className="studio-steps"><span><b>01</b> إضافة</span><i /><span><b>02</b> صورة أو فيديو</span><i /><span><b>03</b> نشر</span></div></section>
     <div className="studio-create-toolbar" aria-label="أدوات القوالب"><div><span className="studio-label">مساحة الإنشاء</span><strong>أضف تصميمًا جديدًا من أي مكان.</strong></div><button type="button" className="studio-primary-button" onClick={openCreator}><Plus size={16} /> إضافة قالب جديد</button></div>
-    <section className={`studio-layout ${editorVisible ? "has-editor" : "library-only"}`}>
-      {editorVisible && <div className="studio-editor-panel" role="dialog" aria-modal="true" aria-labelledby="template-editor-title">
-        <div className="studio-panel-top"><div><span className="studio-label">المحرر الخاص بالمالك</span><h2 id="template-editor-title">{activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"}</h2></div><div className="studio-panel-actions"><button type="button" className="studio-close-button" onClick={() => { setEditorVisible(false); resetEditor(); }} aria-label="إغلاق محرر القالب">×</button></div></div>
+    <section className="studio-layout library-only">
+      <OwnerModal open={editorVisible} onClose={closeEditor} title={activeTemplate ? "تعديل قالب محفوظ" : "قالب جديد"} className="template-owner-modal" closeDisabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><div className="studio-editor-panel">
+        <span className="studio-label">المحرر الخاص بالمالك · صورة أو فيديو ونص</span>
         <div className={`owner-control ${isOwner ? "is-unlocked" : ""}`}>
           {isOwner ? <><span><Check size={15} /> وضع المالك مفتوح</span>{!authLoading && !isAuthenticated && <button type="button" onClick={startLogin}>تسجيل دخول المالك</button>}<button type="button" onClick={lockOwner}>إغلاق المحرر</button></> : <><span>أدخل كلمة المرور لفتح الإضافة</span><div><input type="password" inputMode="numeric" maxLength={32} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlockOwner(); }} placeholder="كلمة مرور القوالب" aria-label="كلمة مرور القوالب" /><button type="button" onClick={unlockOwner}>فتح الإضافة</button></div></>}
         </div>
@@ -348,7 +368,8 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
           <div className="template-card-preview"><div className="template-card-image">{mediaData ? renderMedia(mediaData, mediaType) : <ImagePlus size={28} />}</div><p>{text || "سيظهر النص هنا تحت الصورة أو الفيديو"}</p><span>أبو كيان الجنيد · {toolName}</span></div>
           <div className="studio-action-row"><button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ ونشر القالب"}</button><button type="button" className="studio-outline-button" onClick={() => copyValue(text, "draft")}>{copiedId === "draft" ? <Check size={16} /> : <Clipboard size={16} />} {copiedId === "draft" ? "تم النسخ" : "نسخ النص"}</button><button type="button" className="studio-outline-button" onClick={downloadEditor}><Download size={16} /> تحميل</button></div>
         </>}
-      </div>}
+      </div></OwnerModal>
+      <OwnerModal open={confirmTemplateClose} onClose={() => setConfirmTemplateClose(false)} title="تعديلات القالب غير محفوظة" closeDisabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><p>لن تُفقد المسودة إلا إذا اخترت المغادرة دون حفظ.</p><div className="owner-item-toolbar"><button type="button" className="owner-save" onClick={saveTemplate}>حفظ القالب ومغادرة</button><button type="button" className="owner-delete" onClick={() => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); }}>مغادرة دون حفظ</button><button type="button" className="owner-add" onClick={() => setConfirmTemplateClose(false)}>العودة إلى التحرير</button></div></OwnerModal>
       <aside className="studio-library">
         <div className="studio-library-head">
           <div><span className="studio-label">المكتبة السابقة · الأحدث أولًا</span><h2>القوالب المشتركة <b>{visibleTemplateItems.length}</b></h2></div>

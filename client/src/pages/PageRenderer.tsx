@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import type { EditablePage, EditablePageBlock, SiteContent } from "@/lib/siteContent";
 import { isPublishedPage, isSafePageUrl } from "@/lib/siteContent";
 import SandboxCode from "./SandboxCode";
+import FullPageCode from "./FullPageCode";
 import "./pageRenderer.css";
 
 export type PageRendererMode = "preview" | "live";
@@ -56,6 +57,13 @@ export function PageRenderer({ page, site, mode = "live", showHidden = mode === 
     ...(appearance.backgroundImage ? { backgroundImage: `linear-gradient(rgba(7,20,38,.82),rgba(7,20,38,.92)),url(${JSON.stringify(appearance.backgroundImage)})` } : {}),
   } as React.CSSProperties;
   if (hidden && !showHidden) return null;
+
+  if (page.renderMode === "code") {
+    return <main dir="rtl" className={`page-renderer page-renderer-code ${hidden ? "is-hidden" : ""} ${className}`} style={style} data-page-slug={page.slug}>
+      {hidden && <div className="page-renderer-preview-badge">مسودة / مخفية — معاينة المالك فقط</div>}
+      <FullPageCode page={page} code={code} mode={mode} sectionLinks={page.navItems} />
+    </main>;
+  }
 
   return (
     <main dir="rtl" className={`page-renderer ${hidden ? "is-hidden" : ""} ${className}`} style={style} data-page-slug={page.slug}>

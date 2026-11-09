@@ -2,6 +2,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { siteContentVersions, siteSettings } from "../drizzle/schema";
 import { getDb } from "./db";
 import { storagePut } from "./storage";
+import { syncPageMediaMetadata } from "./pageMedia";
 
 const MAX_HISTORY = 20;
 const PAGE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -109,6 +110,10 @@ async function uploadKnownImages(content: JsonRecord): Promise<JsonRecord> {
     for (let pageIndex = 0; pageIndex < next.pages.length; pageIndex += 1) {
       const page = next.pages[pageIndex];
       if (!isRecord(page)) continue;
+      if (isRecord(page.draft)) {
+        const nested = await uploadKnownImages({ pages: [page.draft] });
+        page.draft = (nested.pages as unknown[])[0];
+      }
       if (isRecord(page.appearance)) page.appearance.backgroundImage = await uploadImage(page.appearance.backgroundImage, `page-${pageIndex}-background-${storageName(page.appearance.backgroundImage, "image")}`, `pages[${pageIndex}].appearance.backgroundImage`);
       if (Array.isArray(page.blocks)) {
         for (let blockIndex = 0; blockIndex < page.blocks.length; blockIndex += 1) {
@@ -150,6 +155,7 @@ export async function saveSiteContentReliable(content: JsonRecord) {
   if (!db) throw new Error("Database unavailable");
   let readback: string | undefined;
   await db.transaction(async (tx) => {
+    if (Array.isArray(normalized.pages)) await syncPageMediaMetadata(tx, normalized.pages);
     const current = await tx.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
     if (current[0]?.contentJson) await tx.insert(siteContentVersions).values({ contentJson: current[0].contentJson });
     await tx.insert(siteSettings).values({ id: 1, contentJson: serialized }).onDuplicateKeyUpdate({ set: { contentJson: serialized } });

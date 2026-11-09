@@ -71,6 +71,13 @@
       "when": 1794181198511,
       "tag": "0009_silent_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1794185676397,
+      "tag": "0010_flaky_spyke",
+      "breakpoints": true
     }
   ]
 }

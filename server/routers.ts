@@ -7,6 +7,8 @@ import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import { cleanupDeletedSharedTemplates, createFreeSite, createSharedTemplate, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, updateSharedTemplate, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, updateCreativeSubmission, deleteCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, createCreativeCategory, updateCreativeCategory, deleteCreativeCategory, searchOwnerContent, listTemplateCategories, createTemplateCategory, updateTemplateCategory, deleteTemplateCategory } from "./db";
 import { storagePut } from "./storage";
+import { uploadPageMedia, listPageMedia, verifyPageMediaOwnerPin } from "./pageMedia";
+import { clearOwnerWorkingDraft, readOwnerWorkingDraft, saveOwnerWorkingDraft, publicSiteContent } from "./ownerDraftPersistence";
 import { backupSiteContent, listSiteContentHistory, readSiteContentVersion, saveSiteContentReliable } from "./siteContentPersistence";
 
 const toolSchema = z.enum(["Gemini", "Chat GBT"]);
@@ -39,6 +41,10 @@ function siteFileName(name: string) {
 
 export const appRouter = router({
   system: systemRouter,
+  pageMedia: router({
+    upload: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), pageId: z.string().min(1).max(128), name: z.string().min(1).max(255), folder: z.string().max(160).default(""), description: z.string().max(5000).default(""), fileName: z.string().min(1).max(255), mimeType: z.string().max(255), data: z.string().max(36_000_000), replacementId: z.string().optional() })).mutation(({ input }) => { try { verifyPageMediaOwnerPin(input.ownerPin); } catch { throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); } return uploadPageMedia(input); }),
+    list: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), pageId: z.string().min(1).max(128) })).mutation(({ input }) => { try { verifyPageMediaOwnerPin(input.ownerPin); } catch { throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); } return listPageMedia(input.ownerPin, input.pageId); }),
+  }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -88,10 +94,32 @@ export const appRouter = router({
     removeWithPin: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), id: z.number() })).mutation(({ input }) => { if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." }); return deleteTemplateCategory(input.id); }),
   }),
   siteContent: router({
+    adminGet: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32) })).mutation(async ({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      const raw = await getSiteContent(); return raw ? JSON.parse(raw) as Record<string, unknown> : null;
+    }),
+    page: publicProcedure.input(z.object({ slug: z.string().min(1).max(80) })).query(async ({ input }) => {
+      const raw = await getSiteContent(); if (!raw) return null;
+      const site = publicSiteContent(JSON.parse(raw));
+      const page = Array.isArray(site.pages) ? site.pages.find((page: any) => page.slug === input.slug) : null;
+      return page ? { page, settings: site.settings, customCode: site.customCode } : null;
+    }),
+    workingDraft: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32) })).mutation(({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      return readOwnerWorkingDraft();
+    }),
+    saveWorkingDraft: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), content: z.record(z.string(), z.unknown()) })).mutation(({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      return saveOwnerWorkingDraft(input.content);
+    }),
+    clearWorkingDraft: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32) })).mutation(({ input }) => {
+      if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
+      return clearOwnerWorkingDraft();
+    }),
     get: publicProcedure.query(async () => {
       const raw = await getSiteContent();
       if (!raw) return null;
-      try { return JSON.parse(raw) as Record<string, unknown>; } catch { return null; }
+      try { return publicSiteContent(JSON.parse(raw) as Record<string, unknown>); } catch { return null; }
     }),
     save: publicProcedure.input(z.object({ ownerPin: z.string().min(4).max(32), content: z.record(z.string(), z.unknown()) })).mutation(({ input }) => {
       if (input.ownerPin !== ENV.ownerPin) throw new TRPCError({ code: "FORBIDDEN", message: "كلمة مرور المالك غير صحيحة." });
