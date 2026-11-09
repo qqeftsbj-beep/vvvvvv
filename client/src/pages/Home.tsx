@@ -265,7 +265,7 @@ export default function Home() {
             <span className="brand-mark-wrap">
               <BrandSeal className="brand-mark" />
             </span>
-            <span className="brand-avatar"><img src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" alt="" /></span>
+            <span className="brand-avatar"><img src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" alt="صورة أبو كيان الجنيد الشخصية" /></span>
             <span className="brand-copy">
               <strong>أبو كيان الجنيد</strong>
               <span>استوديو إبداعي · اليمن</span>
@@ -455,7 +455,7 @@ export default function Home() {
         {customButtons("services").length > 0 && <div className="custom-section-actions">{customButtons("services").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{buttonIcon(button)} {button.label}<ArrowLeft size={14} /></button>)}</div>}
       </section>
 
-      {content.products.length > 0 && <section id="products" className="section products-section" data-reveal><span className="section-ghost" aria-hidden="true">04</span><div className="section-intro"><span className="section-index">/ 04</span><div><div className="eyebrow">منتجات وخدمات جاهزة</div><h2>أشياء صُممت<br /><em>لتُطلب الآن.</em></h2></div><p>أضف منتجاتك أو باقاتك من لوحة التحكم، واجعلها ظاهرة في واجهة الموقع بشكل واضح.</p></div><div className="product-grid">{content.products.map((product) => <article className="product-card" key={product.id}>{product.image && <img src={product.image} alt="" loading="lazy" />}<div><h3>{product.title}</h3><p>{product.description}</p><strong>{product.price}</strong></div></article>)}</div></section>}
+      {content.products.length > 0 && <section id="products" className="section products-section" data-reveal><span className="section-ghost" aria-hidden="true">04</span><div className="section-intro"><span className="section-index">/ 04</span><div><div className="eyebrow">منتجات وخدمات جاهزة</div><h2>أشياء صُممت<br /><em>لتُطلب الآن.</em></h2></div><p>أضف منتجاتك أو باقاتك من لوحة التحكم، واجعلها ظاهرة في واجهة الموقع بشكل واضح.</p></div><div className="product-grid">{content.products.map((product) => <article className="product-card" key={product.id}>{product.image && <img src={product.image} alt={product.title?.trim() || "منتج من أبو كيان الجنيد"} loading="lazy" />}<div><h3>{product.title}</h3><p>{product.description}</p><strong>{product.price}</strong></div></article>)}</div></section>}
 
       <section id="work" className="section work-section" data-reveal>
         <span className="section-ghost" aria-hidden="true">03</span>
