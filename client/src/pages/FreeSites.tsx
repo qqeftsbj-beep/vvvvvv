@@ -5,12 +5,14 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { trpc } from "@/lib/trpc";
+import { useOwnerPreview } from "@/contexts/OwnerPreviewContext";
 
 export default function FreeSites() {
+  const preview=useOwnerPreview();
   const { theme, toggleTheme } = useTheme();
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const sitesQuery = trpc.freeSites.list.useQuery(undefined, { staleTime: 30_000 });
-  const sites = sitesQuery.data || [];
+  const sites = preview?.collections.freeSites.filter(item=>item.isVisible===1) || sitesQuery.data || [];
 
   const copyUrl = async (id: number, url: string) => {
     try {

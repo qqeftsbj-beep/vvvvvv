@@ -276,7 +276,7 @@ export function normalizeSiteContent(value: unknown): SiteContent {
   return {
     ...defaultSiteContent,
     ...saved,
-    services: Array.isArray(saved.services) && saved.services.length ? saved.services : defaultSiteContent.services,
+    services: Array.isArray(saved.services) ? saved.services : defaultSiteContent.services,
     products: Array.isArray(saved.products) ? saved.products : defaultSiteContent.products,
     buttons: migratedButtons,
     pages: Array.isArray(saved.pages) ? saved.pages : defaultSiteContent.pages,

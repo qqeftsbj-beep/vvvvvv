@@ -1,0 +1,1 @@
+ALTER TABLE `management_workspaces` ADD `metadataJson` mediumtext NOT NULL;

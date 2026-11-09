@@ -30,6 +30,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import CategoryStrip from "@/components/CategoryStrip";
 import OwnerModal from "@/components/OwnerModal";
 import "./TemplateStudio.css";
+import { useOwnerPreview } from "@/contexts/OwnerPreviewContext";
 
 type MediaType = "image" | "video";
 
@@ -94,12 +95,19 @@ function mediaTypeForFile(file: File): MediaType | null {
 }
 
 export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioProps) {
+  const ownerPreview=useOwnerPreview();
+  const [isOwner, setIsOwner] = useState(false);
   const storageKey = `abu-kayan-templates-${toolName.toLowerCase().replace(/\s/g, "-")}`;
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const templatesQuery = trpc.templates.list.useQuery({ tool: toolName }, { refetchOnWindowFocus: true, staleTime: 0 });
   const categoriesQuery = trpc.templateCategories.list.useQuery({ tool: toolName }, { refetchOnWindowFocus: true, staleTime: 0 });
-  const templates = useMemo<Template[]>(() => (templatesQuery.data || []).map((item) => ({
+  const privateList=trpc.templates.adminList.useMutation();
+  const privateCategories=trpc.templateCategories.adminWithPassword.useMutation();
+  const [privateRows,setPrivateRows]=useState<NonNullable<typeof templatesQuery.data>>([]);
+  const [privateCategoryRows,setPrivateCategoryRows]=useState<NonNullable<typeof categoriesQuery.data>>([]);
+  const sourceRows=ownerPreview ? ownerPreview.collections.templates.filter(item=>item.tool===toolName) : isOwner ? privateRows : templatesQuery.data || [];
+  const templates = useMemo<Template[]>(() => sourceRows.map((item) => ({
     id: String(item.id),
     serverId: item.id,
     text: item.text,
@@ -108,11 +116,18 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     mediaType: (item.mediaType === "video" ? "video" : "image") as MediaType,
     category: item.category || "other",
     createdAt: new Date(item.createdAt).getTime(),
-  })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [templatesQuery.data]);
+  })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [sourceRows]);
   const utils = trpc.useUtils();
-  const createTemplateMutation = trpc.templates.create.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
-  const updateTemplateMutation = trpc.templates.update.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
-  const deleteTemplateMutation = trpc.templates.remove.useMutation({ onSuccess: () => utils.templates.list.invalidate({ tool: toolName }) });
+  const refreshPrivate=async()=>{
+    if(ownerPreview)return;
+    try {
+      const [rows,categories]=await Promise.all([privateList.mutateAsync({tool:toolName,ownerPassword:templatePassword}),privateCategories.mutateAsync({tool:toolName,ownerPassword:templatePassword})]);
+      setPrivateRows(rows);setPrivateCategoryRows(categories);
+    } catch(error) { toast.error(error instanceof Error ? error.message : "تعذر تحميل نسخة القوالب الخاصة."); }
+  };
+  const createTemplateMutation = trpc.templates.create.useMutation({ onSuccess: () => { void refreshPrivate(); void utils.templates.list.invalidate({ tool: toolName }); } });
+  const updateTemplateMutation = trpc.templates.update.useMutation({ onSuccess: () => { void refreshPrivate(); void utils.templates.list.invalidate({ tool: toolName }); } });
+  const deleteTemplateMutation = trpc.templates.remove.useMutation({ onSuccess: () => { void refreshPrivate(); void utils.templates.list.invalidate({ tool: toolName }); } });
   const [activeId, setActiveId] = useState("");
   const [text, setText] = useState("");
   const [mediaData, setMediaData] = useState("");
@@ -122,10 +137,10 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   const [draftCategory, setDraftCategory] = useState("other");
   const [copiedId, setCopiedId] = useState("");
   const [expandedTextIds, setExpandedTextIds] = useState<string[]>([]);
-  const [isOwner, setIsOwner] = useState(false);
   const [pin, setPin] = useState("");
   const [editorVisible, setEditorVisible] = useState(false);
   const [templatePassword, setTemplatePassword] = useState(() => loadSiteContent().settings.templatePassword);
+  useEffect(()=>{if(isOwner) void refreshPrivate();},[isOwner,toolName,templatePassword]);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [confirmTemplateClose, setConfirmTemplateClose] = useState(false);
   const draftBaseline = useRef(JSON.stringify(["", "", "", "image", "other"]));
@@ -152,7 +167,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   }, []);
 
   const activeTemplate = useMemo(() => templates.find((template) => template.id === activeId), [activeId, templates]);
-  const visibleCategories = categoriesQuery.data || [];
+  const visibleCategories = ownerPreview ? ownerPreview.collections.templateCategories.filter(item=>item.tool===toolName) : isOwner ? privateCategoryRows : categoriesQuery.data || [];
   const categoryNames = useMemo(() => new Map(visibleCategories.map((category) => [category.slug, category.name])), [visibleCategories]);
   const visibleTemplateItems = useMemo(() => {
     const allowed = new Set(visibleCategories.map((category) => category.slug));
@@ -235,6 +250,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
   };
 
   const saveTemplate = () => {
+    if(ownerPreview) return toast("هذه معاينة آخر نسخة محفوظة. عدّل القالب من مكتبة التصاميم ثم حدّث المعاينة.");
     if (createTemplateMutation.isPending || updateTemplateMutation.isPending) return;
     if (!isOwner) return toast("اضغط إضافة قالب جديد وأدخل كلمة المرور أولًا.");
     if (!mediaData || !text.trim()) return toast.error("أضف صورة أو فيديو ونصًا قبل الحفظ.");
@@ -245,12 +261,12 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
       const newMedia = mediaData.startsWith("data:") ? { mediaData } : {};
       updateTemplateMutation.mutate(
         { id: activeTemplate.serverId, category: draftCategory, text: payload.text, mediaType, ...newMedia, imageName: payload.imageName, ownerPassword: templatePassword },
-        { onSuccess: () => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); toast.success("تم تحديث القالب وإعادته إلى المكتبة."); }, onError: (error) => toast.error(error.message || "تعذر تحديث القالب المشترك.") },
+        { onSuccess: () => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); toast.success("حُفظ تعديل القالب في نسخة العمل الخاصة. يظهر للعامة بعد الترحيل من لوحة المالك."); }, onError: (error) => toast.error(error.message || "تعذر تحديث القالب المشترك.") },
       );
       return;
     }
     createTemplateMutation.mutate(payload, {
-      onSuccess: () => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); toast.success("تمت إضافة القالب إلى المكتبة المشتركة."); },
+      onSuccess: () => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); toast.success("حُفظ القالب في نسخة العمل الخاصة. لم يتغير الموقع العام قبل الترحيل."); },
       onError: (error) => toast.error(error.message || "تعذر حفظ القالب المشترك. حاول مرة أخرى."),
     });
   };
@@ -274,7 +290,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
     const serverId = templates.find((item) => item.id === id)?.serverId;
     if (!serverId) return;
     deleteTemplateMutation.mutate({ id: serverId, ownerPassword: templatePassword }, {
-      onSuccess: () => { if (id === activeId) { resetEditor(); setEditorVisible(false); } toast.success("تم نقل القالب إلى سلة المحذوفات."); },
+      onSuccess: () => { if (id === activeId) { resetEditor(); setEditorVisible(false); } toast.success("نُقل القالب إلى سلة محذوفات العمل الخاص. النسخة العامة لا تتغير قبل الترحيل."); },
       onError: () => toast.error("تعذر نقل القالب إلى سلة المحذوفات."),
     });
   };
@@ -366,7 +382,7 @@ export default function TemplateStudio({ toolName, toolLabel }: TemplateStudioPr
           <label className="studio-field"><span>النص أسفل الوسيط</span><textarea value={text} maxLength={MAX_TEXT_LENGTH} onChange={(event) => setText(event.target.value)} placeholder="اكتب التهنئة أو النص الذي تريد الاحتفاظ به..." /><small>{text.length.toLocaleString("ar-EG")} / 10,000</small></label>
           <label className="studio-field"><span>قسم التصميم</span><select required aria-required="true" aria-label="قسم التصميم" value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{activeTemplate && !visibleCategories.some((category) => category.slug === activeTemplate.category) && <option value={activeTemplate.category}>{categoryNames.get(activeTemplate.category) || activeTemplate.category}</option>}{!visibleCategories.length && <option value="other">أخرى</option>}{visibleCategories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select><small>اختر القسم الذي سيظهر فيه التصميم للزوار.</small></label>
           <div className="template-card-preview"><div className="template-card-image">{mediaData ? renderMedia(mediaData, mediaType) : <ImagePlus size={28} />}</div><p>{text || "سيظهر النص هنا تحت الصورة أو الفيديو"}</p><span>أبو كيان الجنيد · {toolName}</span></div>
-          <div className="studio-action-row"><button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ ونشر القالب"}</button><button type="button" className="studio-outline-button" onClick={() => copyValue(text, "draft")}>{copiedId === "draft" ? <Check size={16} /> : <Clipboard size={16} />} {copiedId === "draft" ? "تم النسخ" : "نسخ النص"}</button><button type="button" className="studio-outline-button" onClick={downloadEditor}><Download size={16} /> تحميل</button></div>
+          <div className="studio-action-row"><button type="button" className="studio-primary-button" onClick={saveTemplate} disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><Check size={17} /> {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "جارٍ الحفظ..." : "حفظ القالب كمسودة"}</button><button type="button" className="studio-outline-button" onClick={() => copyValue(text, "draft")}>{copiedId === "draft" ? <Check size={16} /> : <Clipboard size={16} />} {copiedId === "draft" ? "تم النسخ" : "نسخ النص"}</button><button type="button" className="studio-outline-button" onClick={downloadEditor}><Download size={16} /> تحميل</button></div>
         </>}
       </div></OwnerModal>
       <OwnerModal open={confirmTemplateClose} onClose={() => setConfirmTemplateClose(false)} title="تعديلات القالب غير محفوظة" closeDisabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}><p>لن تُفقد المسودة إلا إذا اخترت المغادرة دون حفظ.</p><div className="owner-item-toolbar"><button type="button" className="owner-save" onClick={saveTemplate}>حفظ القالب ومغادرة</button><button type="button" className="owner-delete" onClick={() => { setConfirmTemplateClose(false); setEditorVisible(false); resetEditor(); }}>مغادرة دون حفظ</button><button type="button" className="owner-add" onClick={() => setConfirmTemplateClose(false)}>العودة إلى التحرير</button></div></OwnerModal>

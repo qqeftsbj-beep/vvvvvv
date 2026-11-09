@@ -1,22 +1,4 @@
-import { DragEvent, useState } from "react";
-import { ChevronDown, ChevronUp, GripVertical, Plus, Save, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
-
-const pin = () => (typeof window === "undefined" ? "770562" : window.localStorage.getItem("abu-kayan-owner-pin") || "770562");
-export const reorderCategoryIds = (ids: number[], from: number, to: number) => { const next = [...ids]; if (from === to || from < 0 || to < 0 || from >= next.length || to >= next.length) return next; const [moved] = next.splice(from, 1); next.splice(to, 0, moved); return next; };
-
-export default function OwnerCreativeCategories({ unlocked }: { unlocked: boolean }) {
-  const query = trpc.creativeCategories.adminList.useQuery(undefined, { enabled: unlocked, staleTime: 0 });
-  const utils = trpc.useUtils();
-  const [dragged, setDragged] = useState<number | null>(null);
-  const refresh = () => { utils.creativeCategories.adminList.invalidate(); utils.creativeCategories.list.invalidate(); };
-  const create = trpc.creativeCategories.createWithPin.useMutation({ onSuccess: () => { refresh(); toast.success("تمت إضافة القسم ومزامنته."); } });
-  const update = trpc.creativeCategories.updateWithPin.useMutation({ onSuccess: () => { refresh(); toast.success("تم حفظ القسم."); } });
-  const reorder = trpc.creativeCategories.reorderWithPin.useMutation({ onSuccess: () => { refresh(); toast.success("تم حفظ ترتيب الأقسام لجميع الزوار."); } });
-  const remove = trpc.creativeCategories.removeWithPin.useMutation({ onSuccess: () => { refresh(); toast.success("تم حذف القسم."); } });
-  if (!unlocked) return null;
-  const drop = (event: DragEvent<HTMLDivElement>, target: number) => { event.preventDefault(); if (dragged === null || !query.data) return; const ids = reorderCategoryIds(query.data.map((item) => item.id), dragged, target); setDragged(null); reorder.mutate({ ownerPin: pin(), ids }); };
-  const moveBy = (index: number, direction: -1 | 1) => { if (!query.data) return; const ids = reorderCategoryIds(query.data.map((item) => item.id), index, index + direction); reorder.mutate({ ownerPin: pin(), ids }); };
-  return <section className="owner-services-card owner-categories-card"><div className="owner-card-heading"><div><span className="studio-label">08 / أقسام الإبداع</span><h2>إدارة أقسام المشاركات</h2></div><button type="button" className="owner-add" onClick={() => create.mutate({ ownerPin: pin(), name: "قسم جديد", slug: `section-${Date.now()}`, sortOrder: (query.data?.length || 0) + 1, isVisible: true })}><Plus size={16} /> إضافة قسم</button></div><p className="owner-security-note">اسحب مقبض أي قسم إلى موضع جديد. يحفظ الترتيب تلقائيًا في قاعدة البيانات ويظهر لجميع الزوار والأجهزة. على الهاتف استخدم سهمي الأعلى والأسفل.</p><div className="owner-category-list">{query.data?.map((category, index) => <div className="owner-category-row" key={category.id} draggable onDragStart={() => setDragged(index)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => drop(event, index)}><span className="owner-category-drag" aria-label="اسحب لترتيب القسم"><GripVertical size={18} /></span><label><span>اسم القسم</span><input defaultValue={category.name} onBlur={(event) => update.mutate({ ownerPin: pin(), id: category.id, name: event.target.value })} /></label><label><span>الترتيب</span><input type="number" min="0" defaultValue={category.sortOrder} onBlur={(event) => update.mutate({ ownerPin: pin(), id: category.id, sortOrder: Number(event.target.value) })} /></label><label><span>الظهور</span><select defaultValue={category.isVisible === 1 ? "visible" : "hidden"} onChange={(event) => update.mutate({ ownerPin: pin(), id: category.id, isVisible: event.target.value === "visible" })}><option value="visible">ظاهر</option><option value="hidden">مخفي</option></select></label><div className="owner-category-move"><button type="button" onClick={() => moveBy(index, -1)} disabled={index === 0} aria-label="تحريك القسم للأعلى"><ChevronUp size={15} /></button><button type="button" onClick={() => moveBy(index, 1)} disabled={index === (query.data?.length || 1) - 1} aria-label="تحريك القسم للأسفل"><ChevronDown size={15} /></button></div><button type="button" className="owner-delete" onClick={() => { if (window.confirm("حذف هذا القسم؟ ستبقى المشاركات محفوظة ضمن أخرى.")) remove.mutate({ ownerPin: pin(), id: category.id }); }} aria-label="حذف القسم"><Trash2 size={16} /></button><Save size={15} className="owner-category-save-mark" /></div>)}</div></section>;
-}
+import React from "react";
+import OwnerCategoryWorkspace, { type CategoryWorkspaceProps } from "./OwnerCategoryWorkspace";
+export const reorderCategoryIds=(ids:number[],from:number,to:number)=>{const next=[...ids];if(from===to||from<0||to<0||from>=next.length||to>=next.length)return next;const [moved]=next.splice(from,1);next.splice(to,0,moved);return next;};
+export default function OwnerCreativeCategories(props:CategoryWorkspaceProps & {unlocked:boolean}){return <OwnerCategoryWorkspace {...props}/>;}

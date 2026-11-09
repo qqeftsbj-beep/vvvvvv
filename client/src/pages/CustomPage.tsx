@@ -1,5 +1,5 @@
 import { ArrowRight, Loader2 } from "lucide-react";
-import React, { type ReactNode } from "react";
+import React, { useEffect, type ReactNode } from "react";
 import { Link, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { isPublishedPage, normalizeSiteContent } from "@/lib/siteContent";
@@ -12,6 +12,17 @@ function CustomPageState({ children }: { children: ReactNode }) {
 export default function CustomPage() {
   const [, params] = useRoute("/custom/:slug");
   const content = trpc.siteContent.page.useQuery({ slug: params?.slug || "missing-page" }, { staleTime: 0, refetchInterval: 5_000, refetchOnWindowFocus: true });
+  useEffect(() => {
+    const page = content.data?.page as { renderMode?: string; visible?: boolean; status?: string; useLegacyCustomCode?: boolean; customCode?: { enabled?: boolean } } | undefined;
+    const legacyCode = content.data?.customCode as { enabled?: boolean } | undefined;
+    const enabledCode = page?.customCode?.enabled === true || (page?.useLegacyCustomCode !== false && legacyCode?.enabled === true);
+    if (page?.renderMode === "code" && page.visible !== false && page.status !== "draft" && enabledCode) {
+      // Wouter navigation from managed controls changes the URL without a
+      // browser request. Ask the server for the native document so published
+      // code pages never render the public iframe/card preview in the SPA.
+      window.location.assign(window.location.href);
+    }
+  }, [content.data]);
   const site = normalizeSiteContent(content.data ? { pages: [content.data.page], settings: content.data.settings, customCode: content.data.customCode } : null);
   const page = site.pages.find((item) => item.slug === params?.slug && isPublishedPage(item));
 

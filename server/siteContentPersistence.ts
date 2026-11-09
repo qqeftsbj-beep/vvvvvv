@@ -4,7 +4,8 @@ import { getDb } from "./db";
 import { storagePut } from "./storage";
 import { syncPageMediaMetadata } from "./pageMedia";
 
-const MAX_HISTORY = 20;
+// History is permanent unless the owner explicitly deletes a targeted backup.
+const MAX_HISTORY = Number.MAX_SAFE_INTEGER;
 const PAGE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const INTERNAL_URL_PATTERN = /^\/(?!\/)[^<>"']*$/;
 const HTTPS_URL_PATTERN = /^https:\/\/[^\s<>"']+$/i;
@@ -143,9 +144,9 @@ function parseContent(contentJson: string): JsonRecord {
 }
 
 async function pruneHistory(tx: any) {
-  const rows = await tx.select({ id: siteContentVersions.id }).from(siteContentVersions).orderBy(desc(siteContentVersions.createdAt), desc(siteContentVersions.id));
-  const staleIds = rows.slice(MAX_HISTORY).map((row: { id: number }) => row.id);
-  if (staleIds.length) await tx.delete(siteContentVersions).where(inArray(siteContentVersions.id, staleIds));
+  // Kept as a no-op for callers compiled against the older helper. Never prune
+  // history automatically; deletion is now an explicit targeted API action.
+  void tx;
 }
 
 export async function saveSiteContentReliable(content: JsonRecord) {
@@ -182,7 +183,8 @@ export async function backupSiteContent() {
 export async function listSiteContentHistory() {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  return db.select({ id: siteContentVersions.id, createdAt: siteContentVersions.createdAt }).from(siteContentVersions).orderBy(desc(siteContentVersions.createdAt), desc(siteContentVersions.id)).limit(MAX_HISTORY);
+  const rows = await db.select().from(siteContentVersions).orderBy(desc(siteContentVersions.createdAt), desc(siteContentVersions.id));
+  return rows.map((row: any) => ({ id: row.id, createdAt: row.createdAt, size: Buffer.byteLength(row.contentJson, "utf8"), type: "legacy" }));
 }
 
 export async function readSiteContentVersion(id: number) {

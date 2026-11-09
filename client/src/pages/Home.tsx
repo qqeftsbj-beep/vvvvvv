@@ -36,6 +36,7 @@ import "./managedButtons.css";
 import { useTheme } from "@/contexts/ThemeContext";
 import ChatAssistant from "@/components/ChatAssistant";
 import { trpc } from "@/lib/trpc";
+import { useOwnerPreview } from "@/contexts/OwnerPreviewContext";
 
 const whatsappChannel =
   "https://whatsapp.com/channel/0029Vb7dajy8vd1Hr860dd2N";
@@ -112,6 +113,7 @@ function scrollToId(id: string) {
 }
 
 export default function Home() {
+  const preview=useOwnerPreview();
   const [menuOpen, setMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const lightMode = theme === "light";
@@ -119,23 +121,26 @@ export default function Home() {
   const [content, setContent] = useState<SiteContent>(() => loadSiteContent());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [, navigate] = useLocation();
+  const [, routeNavigate] = useLocation();
+  const navigate=preview?.navigate || routeNavigate;
   const geminiTemplates = trpc.templates.list.useQuery({ tool: "Gemini" }, { staleTime: 30_000 });
   const chatTemplates = trpc.templates.list.useQuery({ tool: "Chat GBT" }, { staleTime: 30_000 });
   const remoteContent = trpc.siteContent.get.useQuery(undefined, { staleTime: 0, refetchInterval: 5_000, refetchOnWindowFocus: true });
 
   useEffect(() => {
+    if(preview) { setContent(preview.content); return; }
     const syncContent = () => setContent(loadSiteContent());
     window.addEventListener("abu-kayan-content-updated", syncContent);
     return () => window.removeEventListener("abu-kayan-content-updated", syncContent);
-  }, []);
+  }, [preview?.content]);
 
   useEffect(() => {
+    if(preview) return;
     if (!remoteContent.data) return;
     const next = normalizeSiteContent(remoteContent.data);
     setContent(next);
     saveSiteContent(next);
-  }, [remoteContent.data]);
+  }, [remoteContent.data,preview]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -186,7 +191,7 @@ export default function Home() {
     portfolio.forEach((item) => {
       if (`${item.title} ${item.text} ${item.eyebrow}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `work-${item.title}`, title: item.title, detail: item.text, kind: "عمل", action: () => { setSearchOpen(false); handleNav("work"); } });
     });
-    [...(geminiTemplates.data || []), ...(chatTemplates.data || [])].forEach((template) => {
+    (preview?.collections.templates || [...(geminiTemplates.data || []), ...(chatTemplates.data || [])]).forEach((template) => {
       if (`${template.text} ${template.imageName} ${template.tool}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `template-${template.id}`, title: template.imageName || "قالب تصميم", detail: template.text, kind: template.tool, action: () => { setSearchOpen(false); navigate(template.tool === "Gemini" ? "/templates/gemini" : "/templates/chat-gbt"); } });
     });
     return results.slice(0, 12);
@@ -196,8 +201,10 @@ export default function Home() {
     const destination = buttonDestination(button);
     if (!destination) return toast.error("هذا الزر يحتاج إلى وجهة صحيحة في لوحة المالك.");
     setMenuOpen(false);
+    if(preview && destination.url.startsWith("/")) return preview.navigate(destination.url);
     if (destination.target === "_blank") { window.open(destination.url.startsWith("#") ? `/${destination.url}` : destination.url, "_blank", "noopener,noreferrer"); return; }
     if (destination.url.startsWith("#")) return handleNav(destination.url.slice(1));
+    if (destination.url.startsWith("/custom/")) return window.location.assign(destination.url);
     if (destination.url.startsWith("/")) return navigate(destination.url);
     window.location.assign(destination.url);
   };

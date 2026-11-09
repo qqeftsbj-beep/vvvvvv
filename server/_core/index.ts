@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { pageMediaRouter } from "../pageMedia";
+import { registerCustomPageRoutes } from "../customPageRoutes";
 import { appRouter } from "../routers";
 import { cleanupDeletedSharedTemplates, getTemplateRetentionDays } from "../db";
 import { createContext } from "./context";
@@ -37,6 +38,9 @@ async function startServer() {
   registerStorageProxy(app);
   app.use("/api/page-media", pageMediaRouter);
   registerOAuthRoutes(app);
+  // Must precede Vite/static SPA fallback so published code pages are real
+  // documents while block pages and unknown pages retain normal SPA routing.
+  registerCustomPageRoutes(app);
 
   // Heartbeat callback. The platform must invoke this after the updated site is deployed.
   app.post("/api/scheduled/cleanupTemplates", async (req, res) => {

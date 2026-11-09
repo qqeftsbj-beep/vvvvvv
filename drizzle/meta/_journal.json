@@ -78,6 +78,20 @@
       "when": 1794185676397,
       "tag": "0010_flaky_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1794253735898,
+      "tag": "0011_orange_dragon_lord",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1794254325905,
+      "tag": "0012_heavy_vermin",
+      "breakpoints": true
     }
   ]
 }

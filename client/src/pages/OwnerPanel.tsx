@@ -19,6 +19,8 @@ import OwnerTemplateCategories from "./OwnerTemplateCategories";
 import OwnerButtons from "./OwnerButtons";
 import OwnerPages from "./OwnerPages";
 import OwnerBackups from "./OwnerBackups";
+import OwnerWorkspaceTrash from "./OwnerWorkspaceTrash";
+import "./ownerWorkspace.css";
 import OwnerModal from "@/components/OwnerModal";
 import { useUnsavedNavigation, type LeaveRequest } from "@/hooks/useUnsavedNavigation";
 import "./OwnerPanel.mobile.css";
@@ -84,7 +86,32 @@ export default function OwnerPanel() {
   const workingDraftLoad = trpc.siteContent.workingDraft.useMutation();
   const workingDraftSave = trpc.siteContent.saveWorkingDraft.useMutation();
   const workingDraftClear = trpc.siteContent.clearWorkingDraft.useMutation();
-  const siteContentSave = trpc.siteContent.save.useMutation();
+  const siteContentSave = trpc.management.save.useMutation();
+  const workspaceLoad = trpc.management.state.useMutation();
+  const publicationSummary = trpc.management.summary.useMutation();
+  const publishMutation = trpc.management.publish.useMutation();
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const workspaceRevisionRef=useRef(0);
+  const [hasUnpublished, setHasUnpublished] = useState(false);
+  const [publishReview, setPublishReview] = useState<{revision:number;changes:Array<{kind:string;label:string;added:number;updated:number;removed:number}>} | null>(null);
+  const [childBusy,setChildBusy]=useState<Record<string,boolean>>({});
+  const anyChildBusy=Object.values(childBusy).some(Boolean);
+  const [childDirty, setChildDirty] = useState<Record<string, boolean>>({});
+  const childSavers = useRef<Record<string, () => Promise<boolean>>>({});
+  const registerChildSave = (key:string, callback:(() => Promise<boolean>) | null) => { if (callback) childSavers.current[key] = callback; else delete childSavers.current[key]; };
+  const [privateSaving, setPrivateSaving] = useState(false);
+  const refreshWorkspace = async (replaceContent = false) => {
+    try {
+      const state = await workspaceLoad.mutateAsync({ownerPin:getOwnerPin()});
+      if(state.revision < workspaceRevisionRef.current) return state;
+      workspaceRevisionRef.current=state.revision;setWorkspaceRevision(state.revision); setHasUnpublished(state.hasChanges);
+      if (replaceContent || JSON.stringify(contentRef.current) === savedRef.current) {
+        const next=normalizeSiteContent(state.content); const serialized=JSON.stringify(next);
+        contentRef.current=next; savedRef.current=serialized; setContent(next); setSavedSnapshot(serialized); setAdminContent(state.content);
+      }
+      return state;
+    } catch (error) { toast.error(error instanceof Error ? error.message : "تعذر تحميل نسخة العمل الخاصة."); return null; }
+  };
   const ownerSearchQuery = trpc.ownerSearch.query.useQuery({ term: searchTerm.trim(), page: 1, pageSize: 20 }, { enabled: unlocked && searchTerm.trim().length >= 2, staleTime: 1000, refetchOnWindowFocus: false });
   const recycleQuery = trpc.templates.recycleBin.useQuery(undefined, { enabled: unlocked && isAuthenticated, refetchOnWindowFocus: false });
   const retentionQuery = trpc.templates.retentionDays.useQuery(undefined, { enabled: unlocked && isAuthenticated, refetchOnWindowFocus: false });
@@ -98,16 +125,19 @@ export default function OwnerPanel() {
   useEffect(() => {
     if (!unlocked) return;
     let cancelled = false;
-    void Promise.all([adminContentLoad.mutateAsync({ ownerPin: getOwnerPin() }), workingDraftLoad.mutateAsync({ ownerPin: getOwnerPin() })]).then(([site, draft]) => {
+    void Promise.all([workspaceLoad.mutateAsync({ ownerPin: getOwnerPin() }), workingDraftLoad.mutateAsync({ ownerPin: getOwnerPin() })]).then(([site, draft]) => {
       if (cancelled) return;
-      setAdminContent(site);
+      if(site.revision >= workspaceRevisionRef.current) { workspaceRevisionRef.current=site.revision; setAdminContent(site.content);
+      setWorkspaceRevision(site.revision); setHasUnpublished(site.hasChanges); }
       setRemoteDraft(draft);
       setRemoteDraftLoaded(true);
     }).catch(error => { if (!cancelled) toast.error(error instanceof Error ? error.message : "تعذر تحميل بيانات المالك."); });
     return () => { cancelled = true; };
   }, [unlocked]);
   useEffect(() => { const data = unlocked ? adminContent : siteContentQuery.data; if (data && JSON.stringify(contentRef.current) === savedRef.current) { const next = normalizeSiteContent(data); setContent(next); setSavedSnapshot(JSON.stringify(next)); } }, [siteContentQuery.data, adminContent, unlocked]);
-  const hasUnsavedChanges = useMemo(() => JSON.stringify(content) !== savedSnapshot, [content, savedSnapshot]);
+  const contentDirty = useMemo(() => JSON.stringify(content) !== savedSnapshot, [content, savedSnapshot]);
+  const hasUnsavedChanges = contentDirty || Object.values(childDirty).some(Boolean);
+  useEffect(() => { if (!unlocked) return; const timer=window.setInterval(() => { void refreshWorkspace(); },15000); return () => window.clearInterval(timer); },[unlocked]);
   const localSearchResults = useMemo(() => {
     const term = searchTerm.trim().toLocaleLowerCase();
     if (term.length < 2) return [] as Array<{ id: string; title: string; subtitle: string; section: "identity" | "appearance" | "buttons" | "pages" | "services" }>;
@@ -120,7 +150,7 @@ export default function OwnerPanel() {
       ...(matches(content.settings.fontFamily) || matches(content.settings.themeMode) ? [{ id: "settings", title: "إعدادات المظهر", subtitle: "الخطوط والألوان والوضع", section: "appearance" as const }] : []),
     ].slice(0, 12);
   }, [content, searchTerm]);
-  const navigationGuard = useUnsavedNavigation(hasUnsavedChanges || uploadsBusy, setLeaveAction);
+  const navigationGuard = useUnsavedNavigation(hasUnsavedChanges || uploadsBusy || anyChildBusy || privateSaving || publishMutation.isPending, setLeaveAction);
   useEffect(() => {
     if (!unlocked || recoveredRef.current || !adminContent) return;
     let local: { content: SiteContent; savedAt: number } | null = null;
@@ -132,7 +162,7 @@ export default function OwnerPanel() {
     if (candidate && JSON.stringify(candidate.content) !== JSON.stringify(normalizeSiteContent(adminContent))) setRecoverable(candidate);
   }, [unlocked, adminContent, remoteDraft, remoteDraftLoaded]);
   useEffect(() => {
-    if (!unlocked || !hasUnsavedChanges) return;
+    if (!unlocked || !contentDirty) return;
     // Browser-local recovery is immediate and never publishes changes.
     try { localStorage.setItem("abu-kayan-owner-working-draft", JSON.stringify({ content, savedAt: Date.now() })); } catch { setDraftState("تعذر حفظ نسخة محلية؛ احفظ المسودة في الخادم."); }
     if (!autoDraft || uploadsBusy || savingRef.current || recoverable) return;
@@ -145,15 +175,15 @@ export default function OwnerPanel() {
       } catch (error) { setDraftState(`تعذر حفظ المسودة تلقائيًا: ${error instanceof Error ? error.message : "خطأ اتصال"}. نسختك المحلية محفوظة.`); }
     }, 1800);
     return () => clearTimeout(timeout);
-  }, [content, unlocked, hasUnsavedChanges, autoDraft, uploadsBusy, recoverable]);
+  }, [content, unlocked, contentDirty, autoDraft, uploadsBusy, recoverable]);
 
-  const unlock = () => {
-    if (pin === getOwnerPin()) {
+  const unlock = async () => {
+    try {
+      await workspaceLoad.mutateAsync({ownerPin:pin});
+      window.localStorage.setItem(OWNER_PIN_KEY,pin);
       window.sessionStorage.setItem("abu-kayan-owner-panel", "true");
-      setUnlocked(true);
-      setPin("");
-      toast.success("تم فتح لوحة المالك.");
-    } else toast.error("كلمة السر غير صحيحة.");
+      setUnlocked(true); setPin(""); toast.success("تم فتح نسخة العمل الخاصة.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "كلمة السر غير صحيحة."); }
   };
 
   const logoutNow = () => {
@@ -162,7 +192,7 @@ export default function OwnerPanel() {
     toast("تم إغلاق لوحة المالك.");
   };
 
-  const logout = () => { if (hasUnsavedChanges) setLeaveAction({ logout: true }); else logoutNow(); };
+  const logout = () => { if (hasUnsavedChanges || anyChildBusy || privateSaving || uploadsBusy) setLeaveAction({ logout: true }); else logoutNow(); };
   const changePages = (pages: EditablePage[]) => setContent((current) => {
     let next = { ...current, pages };
     for (const oldPage of current.pages) { const renamed = pages.find((page) => page.id === oldPage.id); if (renamed && renamed.slug !== oldPage.slug) next = updatePageSlugReferences(next, oldPage.slug, renamed.slug); }
@@ -211,41 +241,49 @@ export default function OwnerPanel() {
     updateProduct(index, "image", await readImage(file));
   };
 
-  const persist = async (next: SiteContent = contentRef.current): Promise<boolean> => {
+  const persist = async (next: SiteContent = contentRef.current, includeChildren = true): Promise<boolean> => {
     if (uploadsBusy) { toast.error("انتظر اكتمال رفع الملفات قبل الحفظ أو المغادرة."); return false; }
+    if (anyChildBusy && includeChildren) { toast.error("انتظر اكتمال الحفظ الجاري في أحد الأقسام."); return false; }
     if (savingRef.current) return false;
     const validation = validateSitePages(next.pages);
-    if (!validation.valid) { const message = validation.errors[0].message; setSaveError(message); toast.error(message); return false; }
-    const sent = JSON.stringify(next);
-    setSaveError("");
-    savingRef.current = true;
+    if (!validation.valid) { const message=validation.errors[0].message; setSaveError(message); toast.error(message); return false; }
+    const sent=JSON.stringify(next); savingRef.current=true; setPrivateSaving(true); setSaveError("");
     try {
-      const result = await siteContentSave.mutateAsync({ ownerPin: getOwnerPin(), content: next as unknown as Record<string, unknown> });
-      if (!result.success || !result.content) throw new Error("لم يؤكد الخادم تخزين التعديلات.");
-      const confirmed = normalizeSiteContent(result.content);
-      saveSiteContent(confirmed);
-      const noNewEdits = JSON.stringify(contentRef.current) === sent;
-      savedRef.current = JSON.stringify(confirmed);
-      if (noNewEdits) contentRef.current = confirmed;
-      setSavedSnapshot(JSON.stringify(confirmed));
-      setContent((current) => JSON.stringify(current) === sent ? confirmed : current);
-      if (confirmed.settings.themeMode !== theme) toggleTheme();
-      if (isAuthenticated) setRetentionMutation.mutate({ retentionDays: confirmed.settings.recycleRetentionDays });
-      await Promise.resolve(utils.siteContent.get.invalidate()).catch(() => undefined);
-      if (noNewEdits) {
-        localStorage.removeItem("abu-kayan-owner-working-draft");
-        setDraftState("");
-        void workingDraftClear.mutateAsync({ ownerPin: getOwnerPin() }).catch(() => undefined);
-      }
-      toast.success("تم تأكيد حفظ التعديلات في قاعدة البيانات ومزامنتها للجميع.");
+      if (includeChildren) for (const saveChild of Object.values(childSavers.current)) if (!(await saveChild())) throw new Error("تعذر حفظ أحد النماذج. بقيت تعديلاته داخل اللوحة.");
+      const result=await siteContentSave.mutateAsync({ownerPin:getOwnerPin(),content:next as unknown as Record<string,unknown>});
+      if (!result.content) throw new Error("لم يؤكد الخادم تخزين نسخة العمل.");
+      const confirmed=normalizeSiteContent(result.content); const signature=JSON.stringify(confirmed);
+      const noNewEdits=JSON.stringify(contentRef.current)===sent;
+      savedRef.current=signature; setSavedSnapshot(signature);
+      if (noNewEdits) { contentRef.current=confirmed; setContent(confirmed); localStorage.removeItem("abu-kayan-owner-working-draft"); }
+      workspaceRevisionRef.current=result.revision;setWorkspaceRevision(result.revision); setHasUnpublished(result.hasChanges); setDraftState("");
+      toast.success("حُفظت التعديلات كنسخة خاصة في قاعدة البيانات — لم يتغير الموقع العام.");
       return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "تعذر الحفظ المركزي.";
-      setSaveError(`${message} — التعديلات ما زالت في اللوحة ولم تُفقد. حاول مجددًا.`);
-      toast.error(message); return false;
-    } finally { savingRef.current = false; }
+    } catch(error) {
+      const message=error instanceof Error ? error.message : "تعذر حفظ نسخة العمل.";
+      setSaveError(`${message} — التعديلات ما زالت في اللوحة ولم تُفقد. حاول مجددًا.`); toast.error(message); return false;
+    } finally { savingRef.current=false; setPrivateSaving(false); }
   };
   const save = () => { void persist(); };
+  const preparePublication = async () => {
+    if (hasUnsavedChanges || uploadsBusy || anyChildBusy || privateSaving) return toast.error("احفظ جميع التعديلات أولًا. الترحيل لا ينشر التعديلات غير المحفوظة.");
+    try { const summary=await publicationSummary.mutateAsync({ownerPin:getOwnerPin()});
+      if (!summary.hasChanges) return toast("لا توجد تعديلات محفوظة جديدة لترحيلها.");
+      setPublishReview({revision:summary.revision, changes:summary.changes});
+    } catch(error) { setSaveError(error instanceof Error ? error.message : "تعذر إعداد ملخص النشر."); }
+  };
+  const publishSaved = async () => {
+    if (!publishReview || hasUnsavedChanges || uploadsBusy || anyChildBusy || privateSaving) return;
+    setSaveError("");
+    try {
+      const result=await publishMutation.mutateAsync({ownerPin:getOwnerPin(),revision:publishReview.revision,confirm:true});
+      if (!result.success) throw new Error("لم يؤكد الخادم الترحيل.");
+      setPublishReview(null); setHasUnpublished(false); await refreshWorkspace(true);
+      await Promise.resolve(utils.siteContent.get.invalidate()).catch(()=>undefined);
+      toast.success("تم ترحيل النسخة المحفوظة بنجاح، وأصبحت متاحة للزوار.");
+    } catch(error) { const message=error instanceof Error ? error.message : "فشل الترحيل."; setSaveError(message); toast.error(message); }
+  };
+
   const changePassword = () => {
     if (currentPin !== getOwnerPin()) return toast.error("كلمة المرور الحالية غير صحيحة.");
     if (newPin.length < 6) return toast.error("اجعل كلمة المرور الجديدة 6 أرقام أو أكثر.");
@@ -261,14 +299,14 @@ export default function OwnerPanel() {
     return persist(withExtensions);
   };
   const completeLeave = (action: LeaveRequest) => { setLeaveAction(null); if (action.logout) logoutNow(); else navigationGuard.allowLeave(action); };
-  const commitPages = async (pages: EditablePage[]) => { const next = { ...contentRef.current, pages }; setContent(next); contentRef.current = next; return persist(next); };
+  const commitPages = async (pages: EditablePage[]) => { const next = { ...contentRef.current, pages }; setContent(next); contentRef.current = next; return persist(next, false); };
   const captureNavigation = (event: React.MouseEvent<HTMLElement>) => {
     const anchor = (event.target as HTMLElement).closest("a[href]");
     const url = anchor?.getAttribute("href");
-    if (hasUnsavedChanges && url && !url.startsWith("#") && anchor?.getAttribute("target") !== "_blank") { event.preventDefault(); event.stopPropagation(); setLeaveAction({ url }); }
+    if ((hasUnsavedChanges || anyChildBusy || privateSaving) && url && !url.startsWith("#") && anchor?.getAttribute("target") !== "_blank") { event.preventDefault(); event.stopPropagation(); setLeaveAction({ url }); }
   };
   const openSearchResult = (result: NonNullable<typeof ownerSearchQuery.data>["items"][number]) => {
-    if (result.url) { if (hasUnsavedChanges || uploadsBusy) setLeaveAction({ url: result.url }); else window.location.assign(result.url); return; }
+    if (result.url) { if (hasUnsavedChanges || uploadsBusy || anyChildBusy) setLeaveAction({ url: result.url }); else window.location.assign(result.url); return; }
     const sectionId = result.section === "free-sites" ? "owner-free-sites" : result.section === "creative" ? "owner-creative-submissions" : "owner-creative-categories";
     setActivePanelTab(result.section === "free-sites" ? "free-sites" : result.section === "creative" ? "submissions" : "creative-categories");
     const section = document.getElementById(sectionId) as HTMLDetailsElement | null;
@@ -280,8 +318,9 @@ export default function OwnerPanel() {
   if (!unlocked) return <main dir="rtl" className="owner-page owner-lock-page"><div className="owner-lock-card"><button type="button" className="theme-toggle owner-lock-theme" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><div className="owner-lock-icon"><LockKeyhole size={25} /></div><span className="studio-label">منطقة خاصة بالمالك</span><h1>لوحة التحكم</h1><p>أدخل كلمة السر للوصول إلى أدوات تعديل الموقع.</p><input autoFocus type="password" inputMode="numeric" value={pin} maxLength={32} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="كلمة السر" aria-label="كلمة السر" /><button type="button" className="owner-save" onClick={unlock}><LockKeyhole size={16} /> فتح اللوحة</button><Link href="/" className="owner-back"><ArrowRight size={15} /> العودة للموقع</Link></div></main>;
 
   return <main dir="rtl" className="owner-page owner-tabbed" onClickCapture={captureNavigation}>
-    <header className="owner-header"><div><span className="studio-label">أبو كيان الجنيد · محرر شامل</span><h1>لوحة التحكم</h1></div><div className="owner-header-actions"><button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><Link href="/" className="owner-back"><ArrowRight size={15} /> معاينة الموقع</Link><button type="button" className="owner-logout" onClick={logout}><LogOut size={15} /> إغلاق</button></div></header>
-    <div className={`owner-save-bar ${hasUnsavedChanges ? "is-dirty" : "is-clean"}`}><div><strong>{siteContentSave.isPending ? "جارٍ الحفظ..." : saveError ? "فشل الحفظ — يمكنك إعادة المحاولة" : uploadsBusy ? "جارٍ رفع الملفات — لا تغادر" : hasUnsavedChanges ? "لديك تعديلات غير محفوظة" : "كل التعديلات محفوظة"}</strong><small>{hasUnsavedChanges ? "احفظ قبل مغادرة اللوحة حتى تظهر التغييرات لجميع الأجهزة." : "المزامنة الأخيرة مؤكدة من قاعدة البيانات."}</small></div><button type="button" className="owner-save" onClick={save} disabled={!hasUnsavedChanges || siteContentSave.isPending || uploadsBusy}><Save size={16} /> {siteContentSave.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}</button></div>
+    <header className="owner-header"><div><span className="studio-label">أبو كيان الجنيد · محرر شامل</span><h1>لوحة التحكم</h1></div><div className="owner-header-actions"><button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"}>{theme === "light" ? <Moon size={15} /> : <Sun size={15} />}</button><a href="/owner/preview" target="_blank" rel="noopener noreferrer" className="owner-back"><ArrowRight size={15} /> معاينة النسخة الخاصة</a><button type="button" className="owner-logout" onClick={logout}><LogOut size={15} /> إغلاق</button></div></header>
+    <div className={`owner-save-bar ${hasUnsavedChanges ? "is-dirty" : "is-clean"}`}><div><strong>{privateSaving ? "جارٍ حفظ النسخة الخاصة..." : publishMutation.isPending ? "جارٍ ترحيل التعديلات..." : saveError ? "تعذر إتمام العملية — يمكنك إعادة المحاولة" : uploadsBusy ? "جارٍ رفع الملفات — لا تغادر" : hasUnsavedChanges ? "لديك تعديلات غير محفوظة" : "كل التعديلات محفوظة"}</strong><small>{hasUnsavedChanges ? "الحفظ خاص بك ولا يغيّر الموقع المنشور." : hasUnpublished ? "لديك نسخة عمل محفوظة لم تُرحّل للعامة بعد." : "نسخة العمل مطابقة لآخر نسخة منشورة."}</small></div><div className="owner-workspace-save-actions"><button type="button" className="owner-save" onClick={save} disabled={!hasUnsavedChanges || privateSaving || uploadsBusy || anyChildBusy || publishMutation.isPending}><Save size={16} /> {privateSaving ? "جارٍ الحفظ..." : "حفظ التعديلات"}</button><button type="button" className="owner-add owner-publish-action" onClick={() => void preparePublication()} disabled={hasUnsavedChanges || !hasUnpublished || privateSaving || uploadsBusy || anyChildBusy || publishMutation.isPending}>{publishMutation.isPending ? "جارٍ الترحيل..." : "ترحيل التعديلات"}</button></div></div>
+
     <nav className="owner-tabs" role="tablist" aria-label="أقسام لوحة التحكم">{[{ id: "identity", label: "الموقع العام" }, { id: "appearance", label: "الألوان والخطوط" }, { id: "security", label: "الأمان" }, { id: "services", label: "الخدمات والمنتجات" }, { id: "buttons", label: "الأزرار" }, { id: "pages", label: "إدارة الصفحات" }, { id: "free-sites", label: "المواقع المجانية" }, { id: "submissions", label: "المشاركات" }, { id: "creative-categories", label: "أقسام الإبداع" }, { id: "template-gemini", label: "تصاميم Gemini" }, { id: "template-chat", label: "تصاميم الأطفال" }, { id: "code", label: "الأكواد المخصصة" }, { id: "backup", label: "النسخ الاحتياطية" }].map((tab) => <button type="button" role="tab" id={`owner-tab-${tab.id}`} aria-selected={activePanelTab === tab.id} aria-controls={({"identity":"owner-identity","appearance":"owner-appearance","security":"owner-security","services":"owner-services","buttons":"owner-buttons","pages":"owner-pages","free-sites":"owner-free-sites","submissions":"owner-creative-submissions","creative-categories":"owner-creative-categories","template-gemini":"owner-template-categories-gemini","template-chat":"owner-template-categories-chat","code":"owner-code-panel","backup":"owner-recycle-panel"} as Record<string, string>)[tab.id]} key={tab.id} onClick={() => setActivePanelTab(tab.id)}>{tab.label}</button>)}</nav>
     <section className="owner-draft-status"><label><input type="checkbox" checked={autoDraft} onChange={e => setAutoDraft(e.target.checked)} /> حفظ تلقائي لمسودة استرداد خاصة (لا ينشر الصفحات)</label>{draftState && <small role="status">{draftState}</small>}{recoverable && <div role="status"><strong>توجد مسودة عمل لم تُعتمد بعد.</strong><button type="button" onClick={() => { setContent(recoverable.content); setRecoverable(null); toast("تم استرجاع المسودة؛ عاينها ثم احفظ للاعتماد."); }}>استعادة المسودة</button><button type="button" onClick={() => { setRecoverable(null); localStorage.removeItem("abu-kayan-owner-working-draft"); void workingDraftClear.mutateAsync({ ownerPin: getOwnerPin() }); }}>تجاهل مسودة الاسترداد</button></div>}</section>
     {saveError && <div role="alert" className="owner-save-error">{saveError}</div>}
@@ -340,19 +379,20 @@ export default function OwnerPanel() {
     <details id="owner-buttons" className="owner-panel-section" hidden={activePanelTab !== "buttons"} open={activePanelTab === "buttons"} role="tabpanel" aria-labelledby="owner-tab-buttons"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>05</span><strong>إدارة الأزرار</strong><small>الوجهات، ترتيب الظهور، والمظهر</small></summary><OwnerButtons buttons={content.buttons} pages={content.pages} settings={content.settings} onChange={(buttons) => update("buttons", buttons)} /></details>
     <details id="owner-pages" className="owner-panel-section" hidden={activePanelTab !== "pages"} open={activePanelTab === "pages"} role="tabpanel" aria-labelledby="owner-tab-pages"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>06</span><strong>إدارة الصفحات</strong><small>صفحات مستقلة، معاينة، أكواد وروابط</small></summary><OwnerPages pages={content.pages} site={content} onChange={changePages} onCreateButton={createPageButton} ownerPin={getOwnerPin()} onCommit={commitPages} onBusyChange={setUploadsBusy} /></details>
 
-    <details id="owner-free-sites" className="owner-panel-section" hidden={activePanelTab !== "free-sites"} open={activePanelTab === "free-sites"} role="tabpanel" aria-labelledby="owner-tab-free-sites"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>06</span><strong>المواقع والخدمات المجانية</strong><small>إدارة الدليل والصور والظهور</small></summary><OwnerFreeSites unlocked={unlocked} /></details>
+    <details id="owner-free-sites" className="owner-panel-section" hidden={activePanelTab !== "free-sites"} open={activePanelTab === "free-sites"} role="tabpanel" aria-labelledby="owner-tab-free-sites"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>06</span><strong>المواقع والخدمات المجانية</strong><small>إدارة الدليل والصور والظهور</small></summary><OwnerFreeSites unlocked={unlocked} ownerPin={unlocked ? getOwnerPin() : undefined} onDirtyChange={(dirty) => setChildDirty(current=>({...current,sites:dirty}))} onSaveRegister={(callback) => registerChildSave("sites",callback)} onWorkspaceChange={() => { void refreshWorkspace(); }} /></details>
 
-    <details id="owner-creative-submissions" className="owner-panel-section" hidden={activePanelTab !== "submissions"} open={activePanelTab === "submissions"} role="tabpanel" aria-labelledby="owner-tab-submissions"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>07</span><strong>مراجعة المشاركات</strong><small>مشاركات مساحتك الإبداعية والموافقة عليها</small></summary><OwnerCreativeSpace unlocked={unlocked} /></details>
+    <details id="owner-creative-submissions" className="owner-panel-section" hidden={activePanelTab !== "submissions"} open={activePanelTab === "submissions"} role="tabpanel" aria-labelledby="owner-tab-submissions"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>07</span><strong>مراجعة المشاركات</strong><small>مشاركات مساحتك الإبداعية والموافقة عليها</small></summary><OwnerCreativeSpace unlocked={unlocked} ownerPin={getOwnerPin()} onDirtyChange={(dirty) => setChildDirty(current=>({...current,submissions:dirty}))} onSaveRegister={(callback) => registerChildSave("submissions",callback)} onBusyChange={busy=>setChildBusy(current=>({...current,submissions:busy}))} onWorkspaceChange={() => { void refreshWorkspace(); }} /></details>
 
-    <details id="owner-creative-categories" className="owner-panel-section" hidden={activePanelTab !== "creative-categories"} open={activePanelTab === "creative-categories"} role="tabpanel" aria-labelledby="owner-tab-creative-categories"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>08</span><strong>أقسام الإبداع</strong><small>إضافة الأقسام وترتيبها وإخفاؤها</small></summary><OwnerCreativeCategories unlocked={unlocked} /></details>
+    <details id="owner-creative-categories" className="owner-panel-section" hidden={activePanelTab !== "creative-categories"} open={activePanelTab === "creative-categories"} role="tabpanel" aria-labelledby="owner-tab-creative-categories"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>08</span><strong>أقسام الإبداع</strong><small>إضافة الأقسام وترتيبها وإخفاؤها</small></summary><OwnerCreativeCategories unlocked={unlocked} onDirtyChange={dirty=>setChildDirty(current=>({...current,creativeCategories:dirty}))} onSaveRegister={callback=>registerChildSave("creativeCategories",callback)} onBusyChange={busy=>setChildBusy(current=>({...current,creativeCategories:busy}))} onWorkspaceChange={()=>{void refreshWorkspace();}} /></details>
 
-    <details id="owner-template-categories-gemini" className="owner-panel-section" hidden={activePanelTab !== "template-gemini"} open={activePanelTab === "template-gemini"} role="tabpanel" aria-labelledby="owner-tab-template-gemini"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>09</span><strong>أقسام تصاميم Gemini وChatGPT</strong><small>إضافة الأقسام وترتيبها وإخفاؤها ونقل القوالب إليها</small></summary><OwnerTemplateCategories tool="Gemini" /></details>
+    <details id="owner-template-categories-gemini" className="owner-panel-section" hidden={activePanelTab !== "template-gemini"} open={activePanelTab === "template-gemini"} role="tabpanel" aria-labelledby="owner-tab-template-gemini"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>09</span><strong>أقسام تصاميم Gemini وChatGPT</strong><small>إضافة الأقسام وترتيبها وإخفاؤها ونقل القوالب إليها</small></summary><OwnerTemplateCategories tool="Gemini" onDirtyChange={dirty=>setChildDirty(current=>({...current,geminiCategories:dirty}))} onSaveRegister={callback=>registerChildSave("geminiCategories",callback)} onBusyChange={busy=>setChildBusy(current=>({...current,geminiCategories:busy}))} onWorkspaceChange={()=>{void refreshWorkspace();}} /></details>
 
-    <details id="owner-template-categories-chat" className="owner-panel-section" hidden={activePanelTab !== "template-chat"} open={activePanelTab === "template-chat"} role="tabpanel" aria-labelledby="owner-tab-template-chat"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>10</span><strong>أقسام تصاميم الأطفال</strong><small>إدارة مستقلة لأقسام ChatGPT</small></summary><OwnerTemplateCategories tool="Chat GBT" /></details>
+    <details id="owner-template-categories-chat" className="owner-panel-section" hidden={activePanelTab !== "template-chat"} open={activePanelTab === "template-chat"} role="tabpanel" aria-labelledby="owner-tab-template-chat"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>10</span><strong>أقسام تصاميم الأطفال</strong><small>إدارة مستقلة لأقسام ChatGPT</small></summary><OwnerTemplateCategories tool="Chat GBT" onDirtyChange={dirty=>setChildDirty(current=>({...current,chatCategories:dirty}))} onSaveRegister={callback=>registerChildSave("chatCategories",callback)} onBusyChange={busy=>setChildBusy(current=>({...current,chatCategories:busy}))} onWorkspaceChange={()=>{void refreshWorkspace();}} /></details>
 
     <details id="owner-code-panel" className="owner-panel-section" hidden={activePanelTab !== "code"} open={activePanelTab === "code"} role="tabpanel" aria-labelledby="owner-tab-code"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>11</span><strong>الإعدادات البرمجية</strong><small>إدارة الإعدادات القابلة للتطبيق بأمان</small></summary><OwnerCodeWorkspace content={content} onApply={applyCodeSettings} /></details>
 
-    <details id="owner-recycle-panel" className="owner-panel-section" hidden={activePanelTab !== "backup"} open={activePanelTab === "backup"} role="tabpanel" aria-labelledby="owner-tab-backup"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>12</span><strong>النسخ الاحتياطية وسلة المحذوفات</strong><small>حفظ واستعادة إعدادات الموقع والقوالب المحذوفة</small></summary><OwnerBackups ownerPin={getOwnerPin()} onRestore={(next) => { setContent(next); toast("حُمّلت النسخة كمسودة. اضغط حفظ التعديلات للاعتماد."); }} /><section className="owner-services-card recycle-bin-card"><div className="owner-card-heading"><div><span className="studio-label">06 / سلة المحذوفات</span><h2>استعادة القوالب المحذوفة</h2></div><Trash2 size={20} /></div><p className="owner-security-note">تُنقل القوالب المحذوفة إلى هنا أولًا. اختر مدة الاحتفاظ من إعدادات الشكل، ثم اضغط التفريغ لحذف ما تجاوز المدة نهائيًا.</p>{!isAuthenticated ? <div className="recycle-login"><p>يلزم تسجيل دخول حساب المالك لإدارة القوالب المشتركة.</p><button type="button" className="owner-save" onClick={startLogin}><LockKeyhole size={16} /> تسجيل دخول المالك</button></div> : <><div className="recycle-toolbar"><span>{recycleQuery.isLoading ? "جارٍ التحميل..." : `${recycleQuery.data?.length || 0} قالب في السلة`}</span><button type="button" className="owner-add" disabled={cleanupMutation.isPending || !recycleQuery.data?.length} onClick={() => cleanupMutation.mutate({ retentionDays: content.settings.recycleRetentionDays })}><Trash2 size={15} /> تفريغ المنتهية</button></div><div className="recycle-list">{!recycleQuery.data?.length && !recycleQuery.isLoading && <p className="owner-empty">سلة المحذوفات فارغة.</p>}{recycleQuery.data?.map((item) => <div className="recycle-row" key={item.id}><div><strong>{item.imageName}</strong><small>{item.tool} · حُذف في {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString("ar-YE") : "—"}</small></div><div className="recycle-actions"><button type="button" className="owner-add" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate({ id: item.id })}><RotateCcw size={14} /> استعادة</button><button type="button" className="owner-delete" disabled={purgeMutation.isPending} onClick={() => { if (window.confirm("حذف نهائي؟ لا يمكن التراجع عن هذا الإجراء.")) purgeMutation.mutate({ id: item.id }); }}><Trash2 size={14} /> حذف نهائي</button></div></div>)}</div></>}</section></details>
-    <OwnerModal open={Boolean(leaveAction)} onClose={() => setLeaveAction(null)} title="تعديلات غير محفوظة" closeDisabled={siteContentSave.isPending || uploadsBusy}><h3>هل تحفظ التعديلات قبل المغادرة؟</h3><p>توجد تغييرات لم يُؤكد اعتمادها. المسودة التلقائية لا تنشر الصفحة.</p><div className="owner-item-toolbar"><button type="button" className="owner-save" disabled={siteContentSave.isPending || uploadsBusy} onClick={async () => { const action = leaveAction; if (await persist() && action && JSON.stringify(contentRef.current) === savedRef.current) completeLeave(action); }}>حفظ ومغادرة</button><button type="button" className="owner-delete" disabled={siteContentSave.isPending || uploadsBusy} onClick={() => { const action = leaveAction; setContent(JSON.parse(savedSnapshot)); localStorage.removeItem("abu-kayan-owner-working-draft"); void workingDraftClear.mutateAsync({ ownerPin: getOwnerPin() }).catch(() => undefined); if (action) completeLeave(action); }}>مغادرة دون حفظ</button><button type="button" className="owner-add" onClick={() => setLeaveAction(null)}>البقاء في الصفحة</button></div>{uploadsBusy && <p role="status">انتظر اكتمال رفع الملفات؛ لن يتم فقدانها أثناء المغادرة.</p>}{saveError && <p role="alert">{saveError}</p>}</OwnerModal>
+    <details id="owner-recycle-panel" className="owner-panel-section" hidden={activePanelTab !== "backup"} open={activePanelTab === "backup"} role="tabpanel" aria-labelledby="owner-tab-backup"><summary className="owner-section-summary" onClick={(event) => event.preventDefault()}><span>12</span><strong>النسخ الاحتياطية وسلة المحذوفات</strong><small>حفظ واستعادة إعدادات الموقع والقوالب المحذوفة</small></summary><OwnerBackups ownerPin={getOwnerPin()} onRestore={(next) => { setContent(next); toast("حُمّلت النسخة كمسودة خاصة."); }} onWorkspaceChange={() => { void refreshWorkspace(true); }} /><OwnerWorkspaceTrash ownerPin={getOwnerPin()} onWorkspaceChange={() => { void refreshWorkspace(true); }} /></details>
+    <OwnerModal open={Boolean(publishReview)} onClose={() => setPublishReview(null)} title="تأكيد ترحيل التعديلات" closeDisabled={publishMutation.isPending}><p>سيُنشر ما حفظته فقط. لن تدخل تعديلات غير محفوظة، أو صفحات مسودة غير معتمدة، أو مشاركات في الانتظار والإلغاء.</p><div className="owner-publication-summary">{publishReview?.changes.map(change=><div key={change.kind}><strong>{change.label}</strong><span>إضافة {change.added} · تعديل {change.updated} · إزالة {change.removed}</span></div>)}</div><p>ستُحفظ نسخة احتياطية كاملة من الموقع المنشور السابق قبل الترحيل. يمكن تحميلها كمسودة لاحقًا دون فقد عملك الحالي.</p><div className="owner-item-toolbar"><button type="button" className="owner-save" disabled={publishMutation.isPending || hasUnsavedChanges} onClick={() => void publishSaved()}>{publishMutation.isPending ? "جارٍ الترحيل..." : "تأكيد النشر للعامة"}</button><button type="button" className="owner-add" disabled={publishMutation.isPending} onClick={() => setPublishReview(null)}>إلغاء</button></div>{saveError && <p role="alert">{saveError}</p>}</OwnerModal>
+    <OwnerModal open={Boolean(leaveAction)} onClose={() => setLeaveAction(null)} title="تعديلات غير محفوظة" closeDisabled={privateSaving || publishMutation.isPending || uploadsBusy || anyChildBusy}><h3>هل تحفظ التعديلات قبل المغادرة؟</h3><p>توجد تغييرات لم تُحفظ. حفظ ومغادرة يحفظ نسخة خاصة فقط ولا ينشرها.</p><div className="owner-item-toolbar"><button type="button" className="owner-save" disabled={privateSaving || publishMutation.isPending || uploadsBusy || anyChildBusy} onClick={async () => { const action = leaveAction; if (await persist() && action && JSON.stringify(contentRef.current) === savedRef.current) completeLeave(action); }}>حفظ ومغادرة</button><button type="button" className="owner-delete" disabled={privateSaving || publishMutation.isPending || uploadsBusy || anyChildBusy} onClick={() => { const action = leaveAction; setContent(JSON.parse(savedSnapshot)); localStorage.removeItem("abu-kayan-owner-working-draft"); void workingDraftClear.mutateAsync({ ownerPin: getOwnerPin() }).catch(() => undefined); if (action) completeLeave(action); }}>مغادرة دون حفظ</button><button type="button" className="owner-add" onClick={() => setLeaveAction(null)}>البقاء في الصفحة</button></div>{uploadsBusy && <p role="status">انتظر اكتمال رفع الملفات؛ لن يتم فقدانها أثناء المغادرة.</p>}{saveError && <p role="alert">{saveError}</p>}</OwnerModal>
   </main>;
 }

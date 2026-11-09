@@ -12,6 +12,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import TemplateStudio from "./pages/TemplateStudio";
 import OwnerPanel from "./pages/OwnerPanel";
+import OwnerPreview from "./pages/OwnerPreview";
 import OwnerInbox from "./pages/OwnerInbox";
 import FreeSites from "./pages/FreeSites";
 import CreativeSpace from "./pages/CreativeSpace";
@@ -22,6 +23,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/owner" component={OwnerPanel} />
+      <Route path="/owner/preview" component={OwnerPreview} />
       <Route path="/owner/inbox" component={OwnerInbox} />
       <Route path="/free-sites" component={FreeSites} />
       <Route path="/creative-space" component={CreativeSpace} />

@@ -1,14 +1,28 @@
-import { and, asc, desc, eq, isNotNull, isNull, lt, like, or } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { CreativeCategory, CreativeSubmission, FreeSite, InsertCreativeCategory, InsertCreativeSubmission, InsertFreeSite, InsertSharedTemplate, InsertTemplateCategory, InsertUser, creativeCategories, creativeSubmissions, freeSites, sharedTemplates, siteSettings, templateCategories, templateSettings, User, users } from "../drizzle/schema";
+import {
+  InsertCreativeCategory,
+  InsertCreativeSubmission,
+  InsertFreeSite,
+  InsertTemplateCategory,
+  InsertUser,
+  creativeSubmissions,
+  templateSettings,
+  User,
+  users,
+} from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
-    try { _db = drizzle(process.env.DATABASE_URL); }
-    catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
+    try {
+      _db = drizzle(process.env.DATABASE_URL);
+    } catch (error) {
+      console.warn("[Database] Failed to connect:", error);
+      _db = null;
+    }
   }
   return _db;
 }
@@ -21,11 +35,22 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   const updateSet: Record<string, unknown> = {};
   const textFields = ["name", "email", "loginMethod"] as const;
   for (const field of textFields) {
-    if (user[field] !== undefined) { values[field] = user[field] ?? null; updateSet[field] = user[field] ?? null; }
+    if (user[field] !== undefined) {
+      values[field] = user[field] ?? null;
+      updateSet[field] = user[field] ?? null;
+    }
   }
-  if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
-  if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
-  else if (user.openId === ENV.ownerOpenId) { values.role = "admin"; updateSet.role = "admin"; }
+  if (user.lastSignedIn !== undefined) {
+    values.lastSignedIn = user.lastSignedIn;
+    updateSet.lastSignedIn = user.lastSignedIn;
+  }
+  if (user.role !== undefined) {
+    values.role = user.role;
+    updateSet.role = user.role;
+  } else if (user.openId === ENV.ownerOpenId) {
+    values.role = "admin";
+    updateSet.role = "admin";
+  }
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
   await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
@@ -38,10 +63,85 @@ export async function getUserByOpenId(openId: string): Promise<User | undefined>
   return result[0];
 }
 
+/**
+ * managementWorkspace imports getDb from this module. Keep this import dynamic so
+ * the compatibility helpers below do not create a module-initialization cycle.
+ */
+async function workspace() {
+  return import("./managementWorkspace");
+}
+
+type WorkspaceKind = "templates" | "freeSites" | "submissions" | "templateCategories" | "creativeCategories";
+
+function dateValue(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  const parsed = new Date(String(value || 0)).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function newestFirst<T extends { createdAt?: unknown; sortOrder?: unknown }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => dateValue(b.createdAt) - dateValue(a.createdAt) || Number(b.sortOrder || 0) - Number(a.sortOrder || 0));
+}
+
+function parseImageUrls<T extends { imageUrls?: unknown }>(row: T): T & { imageUrls: string[] } {
+  if (Array.isArray(row.imageUrls)) return row as T & { imageUrls: string[] };
+  if (typeof row.imageUrls === "string") {
+    try {
+      return { ...row, imageUrls: JSON.parse(row.imageUrls) as string[] };
+    } catch {
+      return { ...row, imageUrls: [] };
+    }
+  }
+  return { ...row, imageUrls: [] };
+}
+
+async function publishedCollection(kind: WorkspaceKind) {
+  const { listPublishedCollection } = await workspace();
+  return listPublishedCollection(kind);
+}
+
+async function workingCollection(kind: WorkspaceKind) {
+  const { listWorkingCollection } = await workspace();
+  return listWorkingCollection(kind);
+}
+
+async function createWorking(kind: WorkspaceKind, value: Record<string, unknown>) {
+  const { createWorkingEntity } = await workspace();
+  return createWorkingEntity(kind, value);
+}
+
+async function updateWorking(kind: WorkspaceKind, id: number, patch: Record<string, unknown>) {
+  const { updateWorkingEntity } = await workspace();
+  return updateWorkingEntity(kind, id, patch);
+}
+
+async function removeWorking(kind: WorkspaceKind, id: number) {
+  const { removeWorkingEntity } = await workspace();
+  return removeWorkingEntity(kind, id);
+}
+
+/** Public template list: published rows only, with hidden categories excluded from the all-tab. */
 export async function listSharedTemplates(tool: string, category?: string) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(sharedTemplates).where(and(eq(sharedTemplates.tool, tool), ...(category ? [eq(sharedTemplates.category, category)] : []), isNull(sharedTemplates.deletedAt))).orderBy(desc(sharedTemplates.createdAt));
+  const [templates, categories] = await Promise.all([
+    publishedCollection("templates"),
+    publishedCollection("templateCategories"),
+  ]);
+  const toolTemplates = templates.filter((row: any) => row.tool === tool);
+  if (category) {
+    const categoryRow=categories.find((row:any)=>row.tool===tool&&row.slug===category);
+    if(categoryRow&&categoryRow.isVisible!==1)return [];
+    return newestFirst(toolTemplates.filter((row: any) => row.category === category));
+  }
+
+  const toolCategories = categories.filter((row: any) => row.tool === tool);
+  const knownSlugs = new Set(toolCategories.map((row: any) => String(row.slug)));
+  const visibleSlugs = new Set(toolCategories.filter((row: any) => row.isVisible === 1).map((row: any) => String(row.slug)));
+  return newestFirst(toolTemplates.filter((row: any) => {
+    const slug = String(row.category || "").trim();
+    // Keep legacy uncategorized/unknown rows visible as they were before categories existed.
+    return !slug || !knownSlugs.has(slug) || visibleSlugs.has(slug);
+  }));
 }
 
 const defaultTemplateCategories: Record<string, Array<Omit<InsertTemplateCategory, "tool">>> = {
@@ -65,73 +165,53 @@ const defaultTemplateCategories: Record<string, Array<Omit<InsertTemplateCategor
 };
 
 export async function listTemplateCategories(tool: string, includeHidden = false) {
-  const defaults = (defaultTemplateCategories[tool] || []).map((item, index) => ({ ...item, tool, id: index + 1, createdAt: new Date(), updatedAt: new Date() }));
-  const db = await getDb();
-  if (!db) return defaults;
-  let rows = await db.select().from(templateCategories).where(eq(templateCategories.tool, tool)).orderBy(asc(templateCategories.sortOrder), asc(templateCategories.createdAt));
-  if (!rows.length) {
-    await db.insert(templateCategories).values(defaults.map(({ id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...item }) => item));
-    rows = await db.select().from(templateCategories).where(eq(templateCategories.tool, tool)).orderBy(asc(templateCategories.sortOrder), asc(templateCategories.createdAt));
-  }
-  const fallback = rows.find((row) => row.slug === `${tool === "Gemini" ? "gemini" : "chat"}-other`);
-  if (fallback) await db.update(sharedTemplates).set({ category: fallback.slug }).where(and(eq(sharedTemplates.tool, tool), eq(sharedTemplates.category, "other")));
-  return includeHidden ? rows : rows.filter((row) => row.isVisible === 1);
+  const rows = (await publishedCollection("templateCategories")).filter((row: any) => row.tool === tool);
+  const source = rows.length ? rows : (defaultTemplateCategories[tool] || []).map((item, index) => ({ ...item, tool, id: index + 1, createdAt: new Date(), updatedAt: new Date() }));
+  return includeHidden ? source : source.filter((row: any) => row.isVisible === 1);
 }
 
-export async function createTemplateCategory(input: InsertTemplateCategory) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(templateCategories).values(input); const rows = await db.select().from(templateCategories).where(eq(templateCategories.id, Number(result[0].insertId))).limit(1); return rows[0]; }
-export async function updateTemplateCategory(id: number, input: Partial<InsertTemplateCategory>) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(templateCategories).set(input).where(eq(templateCategories.id, id)); const rows = await db.select().from(templateCategories).where(eq(templateCategories.id, id)).limit(1); return rows[0]; }
-export async function deleteTemplateCategory(id: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const rows = await db.select().from(templateCategories).where(eq(templateCategories.id, id)).limit(1); if (rows[0]) await db.update(sharedTemplates).set({ category: `${rows[0].tool === "Gemini" ? "gemini" : "chat"}-other` }).where(eq(sharedTemplates.category, rows[0].slug)); await db.delete(templateCategories).where(eq(templateCategories.id, id)); return { success: true } as const; }
+export async function createTemplateCategory(input: InsertTemplateCategory) {
+  return createWorking("templateCategories", input as unknown as Record<string, unknown>);
+}
 
+export async function updateTemplateCategory(id: number, input: Partial<InsertTemplateCategory>) {
+  return updateWorking("templateCategories", id, input as Record<string, unknown>);
+}
+
+export async function deleteTemplateCategory(id: number) {
+  return removeWorking("templateCategories", id);
+}
+
+/** Central workspace trash projection retained under the old template API name. */
 export async function listDeletedSharedTemplates() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(sharedTemplates).where(isNotNull(sharedTemplates.deletedAt)).orderBy(desc(sharedTemplates.deletedAt));
+  const { listTrash } = await workspace();
+  const entries = await listTrash();
+  return entries
+    .filter((entry) => entry.source === "shared_templates" || entry.source === "collections.templates")
+    .map((entry) => ({ ...(entry.value as Record<string, unknown>), deletedAt: new Date(entry.deletedAt), trashId: entry.id }));
 }
 
-export async function createSharedTemplate(input: InsertSharedTemplate) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(sharedTemplates).values(input);
-  const id = Number(result[0].insertId);
-  const rows = await db.select().from(sharedTemplates).where(eq(sharedTemplates.id, id)).limit(1);
-  return rows[0];
-}
-
-export async function updateSharedTemplate(id: number, input: Partial<InsertSharedTemplate>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.update(sharedTemplates).set(input).where(and(eq(sharedTemplates.id, id), isNull(sharedTemplates.deletedAt)));
-  const rows = await db.select().from(sharedTemplates).where(eq(sharedTemplates.id, id)).limit(1);
-  return rows[0];
-}
-
-export async function softDeleteSharedTemplate(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.update(sharedTemplates).set({ deletedAt: new Date() }).where(eq(sharedTemplates.id, id));
-  return { success: true } as const;
+function templateTrashId(entries: Array<{ id: string; source: string; value: unknown }>, templateId: number) {
+  return entries.find((entry) => (entry.source === "shared_templates" || entry.source === "collections.templates") && Number((entry.value as any)?.id) === templateId)?.id;
 }
 
 export async function restoreSharedTemplate(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.update(sharedTemplates).set({ deletedAt: null }).where(eq(sharedTemplates.id, id));
-  return { success: true } as const;
+  const { listTrash, restoreTrash } = await workspace();
+  const trashId = templateTrashId(await listTrash(), id);
+  if (!trashId) return { success: true } as const;
+  return restoreTrash(trashId);
 }
 
-export async function purgeSharedTemplate(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.delete(sharedTemplates).where(eq(sharedTemplates.id, id));
-  return { success: true } as const;
+export async function purgeSharedTemplate(id: number, confirm = true) {
+  const { listTrash, purgeTrash } = await workspace();
+  const trashId = templateTrashId(await listTrash(), id);
+  if (!trashId) return { success: true } as const;
+  return purgeTrash(trashId, confirm);
 }
 
-export async function cleanupDeletedSharedTemplates(retentionDays = 30) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const cutoff = new Date(Date.now() - Math.max(30, Math.min(365, retentionDays)) * 86400000);
-  const result = await db.delete(sharedTemplates).where(lt(sharedTemplates.deletedAt, cutoff));
-  return { success: true, deleted: Number(result[0].affectedRows || 0) } as const;
+/** Automatic expiration is intentionally disabled; deletion is manual central-trash purging only. */
+export async function cleanupDeletedSharedTemplates(_retentionDays = 30) {
+  return { success: true as const, deleted: 0 };
 }
 
 export async function getTemplateRetentionDays() {
@@ -149,98 +229,66 @@ export async function setTemplateRetentionDays(retentionDays: number) {
   return { retentionDays: bounded } as const;
 }
 
-/** Backward-compatible alias used by existing callers and tests. */
-export const deleteSharedTemplate = softDeleteSharedTemplate;
+/** Backward-compatible alias; it now moves only the working snapshot row to central trash. */
+export const deleteSharedTemplate = async (id: number) => removeWorking("templates", id);
 
 export async function listVisibleFreeSites() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(freeSites).where(eq(freeSites.isVisible, 1)).orderBy(desc(freeSites.createdAt), desc(freeSites.sortOrder));
+  return newestFirst((await publishedCollection("freeSites")).filter((row: any) => row.isVisible === 1));
 }
 
 export async function listAllFreeSites() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(freeSites).orderBy(desc(freeSites.createdAt), desc(freeSites.sortOrder));
+  return newestFirst(await workingCollection("freeSites"));
 }
 
 export async function createFreeSite(input: InsertFreeSite) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(freeSites).values(input);
-  const id = Number(result[0].insertId);
-  const rows = await db.select().from(freeSites).where(eq(freeSites.id, id)).limit(1);
-  return rows[0];
+  return createWorking("freeSites", input as unknown as Record<string, unknown>);
 }
 
 export async function updateFreeSite(id: number, input: Partial<InsertFreeSite>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.update(freeSites).set(input).where(eq(freeSites.id, id));
-  const rows = await db.select().from(freeSites).where(eq(freeSites.id, id)).limit(1);
-  return rows[0];
+  return updateWorking("freeSites", id, input as Record<string, unknown>);
 }
 
 export async function deleteFreeSite(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.delete(freeSites).where(eq(freeSites.id, id));
-  return { success: true } as const;
+  return removeWorking("freeSites", id);
 }
 
-
 export async function listApprovedCreativeSubmissions() {
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db.select().from(creativeSubmissions).where(and(eq(creativeSubmissions.status, "approved"), eq(creativeSubmissions.isVisible, 1))).orderBy(desc(creativeSubmissions.createdAt));
-  return rows.map((row) => ({ ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] }));
+  return (await publishedCollection("submissions"))
+    .filter((row: any) => row.status === "approved" && row.isVisible === 1 && row.reviewState === "saved")
+    .map(parseImageUrls);
 }
 
 export async function listAllCreativeSubmissions() {
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db.select().from(creativeSubmissions).orderBy(desc(creativeSubmissions.createdAt));
-  return rows.map((row) => ({ ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] }));
+  return (await workingCollection("submissions")).map(parseImageUrls);
 }
 
+/** Guest submissions intentionally remain original pending inserts; workspace reads merge them privately. */
 export async function createCreativeSubmission(input: InsertCreativeSubmission) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const result = await db.insert(creativeSubmissions).values(input);
   const rows = await db.select().from(creativeSubmissions).where(eq(creativeSubmissions.id, Number(result[0].insertId))).limit(1);
-  const row = rows[0];
-  return row ? { ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] } : row;
+  return rows[0] ? parseImageUrls(rows[0]) : rows[0];
 }
 
 export async function updateCreativeSubmission(id: number, input: Partial<InsertCreativeSubmission>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.update(creativeSubmissions).set(input).where(eq(creativeSubmissions.id, id));
-  const rows = await db.select().from(creativeSubmissions).where(eq(creativeSubmissions.id, id)).limit(1);
-  const row = rows[0];
-  return row ? { ...row, imageUrls: row.imageUrls ? JSON.parse(row.imageUrls) as string[] : [] } : row;
+  return updateWorking("submissions", id, input as Record<string, unknown>);
 }
 
 export async function deleteCreativeSubmission(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.delete(creativeSubmissions).where(eq(creativeSubmissions.id, id));
-  return { success: true } as const;
+  return removeWorking("submissions", id);
 }
 
-
+/** Legacy admin read now means the private working content; public reads use getPublishedSnapshot directly. */
 export async function getSiteContent() {
-  const db = await getDb();
-  if (!db) return null;
-  const rows = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
-  return rows[0]?.contentJson || null;
+  const { getWorkingSnapshot } = await workspace();
+  return JSON.stringify((await getWorkingSnapshot()).content);
 }
 
 export async function saveSiteContent(contentJson: string) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.insert(siteSettings).values({ id: 1, contentJson }).onDuplicateKeyUpdate({ set: { contentJson } });
-  return { success: true } as const;
+  const { savePrivateSiteContent } = await workspace();
+  const content = JSON.parse(contentJson) as Record<string, unknown>;
+  return savePrivateSiteContent(content);
 }
 
 const defaultCreativeCategories: Array<InsertCreativeCategory> = [
@@ -256,58 +304,45 @@ const defaultCreativeCategories: Array<InsertCreativeCategory> = [
 ];
 
 export async function listCreativeCategories(includeHidden = false) {
-  const db = await getDb();
-  if (!db) return defaultCreativeCategories.map((item, index) => ({ ...item, id: index + 1, createdAt: new Date() }));
-  let rows = await db.select().from(creativeCategories).orderBy(asc(creativeCategories.sortOrder), asc(creativeCategories.createdAt));
-  if (!rows.length) {
-    await db.insert(creativeCategories).values(defaultCreativeCategories);
-    rows = await db.select().from(creativeCategories).orderBy(asc(creativeCategories.sortOrder), asc(creativeCategories.createdAt));
-  }
-  return includeHidden ? rows : rows.filter((row) => row.isVisible === 1);
+  const rows = await workingCollection("creativeCategories");
+  const source = rows.length ? rows : defaultCreativeCategories.map((item, index) => ({ ...item, id: index + 1, createdAt: new Date() }));
+  return includeHidden ? source : source.filter((row: any) => row.isVisible === 1);
 }
 
 export async function createCreativeCategory(input: InsertCreativeCategory) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(creativeCategories).values(input);
-  const rows = await db.select().from(creativeCategories).where(eq(creativeCategories.id, Number(result[0].insertId))).limit(1);
-  return rows[0];
+  return createWorking("creativeCategories", input as unknown as Record<string, unknown>);
 }
 
 export async function updateCreativeCategory(id: number, input: Partial<InsertCreativeCategory>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.update(creativeCategories).set(input).where(eq(creativeCategories.id, id));
-  const rows = await db.select().from(creativeCategories).where(eq(creativeCategories.id, id)).limit(1);
-  return rows[0];
+  return updateWorking("creativeCategories", id, input as Record<string, unknown>);
 }
 
 export async function deleteCreativeCategory(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.delete(creativeCategories).where(eq(creativeCategories.id, id));
-  return { success: true } as const;
+  return removeWorking("creativeCategories", id);
 }
 
-
 export type OwnerSearchResult = { kind: "template" | "free-site" | "submission" | "category"; id: number; title: string; subtitle: string; section: "templates" | "free-sites" | "creative" | "categories"; url?: string };
+
+/** Owner search is deliberately sourced from the private working snapshot, including hidden rows. */
 export async function searchOwnerContent(term: string, page = 1, pageSize = 20) {
-  const db = await getDb();
-  if (!db) return { items: [] as OwnerSearchResult[], hasMore: false };
   const clean = term.trim().slice(0, 120);
   if (clean.length < 2) return { items: [] as OwnerSearchResult[], hasMore: false };
-  const pattern = `%${clean}%`; const safePage = Math.max(1, Math.floor(page)); const safeSize = Math.max(5, Math.min(50, Math.floor(pageSize))); const offset = (safePage - 1) * safeSize;
-  const [templateRows, siteRows, submissionRows, categoryRows] = await Promise.all([
-    db.select().from(sharedTemplates).where(and(isNull(sharedTemplates.deletedAt), or(like(sharedTemplates.text, pattern), like(sharedTemplates.imageName, pattern), like(sharedTemplates.tool, pattern)))).orderBy(desc(sharedTemplates.createdAt)).limit(safeSize + 1).offset(offset),
-    db.select().from(freeSites).where(or(like(freeSites.name, pattern), like(freeSites.url, pattern), like(freeSites.description, pattern), like(freeSites.additionalText, pattern))).orderBy(desc(freeSites.createdAt)).limit(safeSize + 1).offset(offset),
-    db.select().from(creativeSubmissions).where(or(like(creativeSubmissions.projectName, pattern), like(creativeSubmissions.description, pattern), like(creativeSubmissions.category, pattern), like(creativeSubmissions.link, pattern), like(creativeSubmissions.contact, pattern))).orderBy(desc(creativeSubmissions.createdAt)).limit(safeSize + 1).offset(offset),
-    db.select().from(creativeCategories).where(or(like(creativeCategories.name, pattern), like(creativeCategories.slug, pattern))).orderBy(asc(creativeCategories.sortOrder)).limit(safeSize + 1).offset(offset),
-  ]);
+  const { getWorkingSnapshot } = await workspace();
+  const snapshot = await getWorkingSnapshot();
+  const pattern = clean.toLocaleLowerCase();
+  const matches = (value: unknown) => String(value ?? "").toLocaleLowerCase().includes(pattern);
+  const safePage = Math.max(1, Math.floor(page));
+  const safeSize = Math.max(5, Math.min(50, Math.floor(pageSize)));
+  const offset = (safePage - 1) * safeSize;
+  const templateRows = newestFirst(snapshot.collections.templates.filter((row: any) => matches(row.text) || matches(row.imageName) || matches(row.tool)));
+  const siteRows = newestFirst(snapshot.collections.freeSites.filter((row: any) => matches(row.name) || matches(row.url) || matches(row.description) || matches(row.additionalText)));
+  const submissionRows = newestFirst(snapshot.collections.submissions.filter((row: any) => matches(row.projectName) || matches(row.description) || matches(row.category) || matches(row.link) || matches(row.contact)));
+  const categoryRows = [...snapshot.collections.creativeCategories, ...snapshot.collections.templateCategories].filter((row: any) => matches(row.name) || matches(row.slug)).sort((a: any, b: any) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0));
   const items: OwnerSearchResult[] = [
-    ...templateRows.slice(0, safeSize).map((row) => ({ kind: "template" as const, id: row.id, title: row.imageName, subtitle: `${row.tool} · ${row.text.slice(0, 100)}`, section: "templates" as const, url: `/templates/${row.tool === "Gemini" ? "gemini" : "chat-gbt"}?template=${row.id}` })),
-    ...siteRows.slice(0, safeSize).map((row) => ({ kind: "free-site" as const, id: row.id, title: row.name, subtitle: row.description || row.url || "موقع مجاني", section: "free-sites" as const })),
-    ...submissionRows.slice(0, safeSize).map((row) => ({ kind: "submission" as const, id: row.id, title: row.projectName || "مشاركة إبداعية", subtitle: row.description || row.category, section: "creative" as const })),
-    ...categoryRows.slice(0, safeSize).map((row) => ({ kind: "category" as const, id: row.id, title: row.name, subtitle: row.slug, section: "categories" as const })),
+    ...templateRows.slice(offset, offset + safeSize).map((row: any) => ({ kind: "template" as const, id: row.id, title: row.imageName, subtitle: `${row.tool} · ${String(row.text || "").slice(0, 100)}`, section: "templates" as const, url: `/templates/${row.tool === "Gemini" ? "gemini" : "chat-gbt"}?template=${row.id}` })),
+    ...siteRows.slice(offset, offset + safeSize).map((row: any) => ({ kind: "free-site" as const, id: row.id, title: row.name, subtitle: row.description || row.url || "موقع مجاني", section: "free-sites" as const })),
+    ...submissionRows.slice(offset, offset + safeSize).map((row: any) => ({ kind: "submission" as const, id: row.id, title: row.projectName || "مشاركة إبداعية", subtitle: row.description || row.category, section: "creative" as const })),
+    ...categoryRows.slice(offset, offset + safeSize).map((row: any) => ({ kind: "category" as const, id: row.id, title: row.name, subtitle: row.slug, section: "categories" as const })),
   ];
-  return { items, hasMore: templateRows.length > safeSize || siteRows.length > safeSize || submissionRows.length > safeSize || categoryRows.length > safeSize };
+  return { items, hasMore: templateRows.length > offset + safeSize || siteRows.length > offset + safeSize || submissionRows.length > offset + safeSize || categoryRows.length > offset + safeSize };
 }

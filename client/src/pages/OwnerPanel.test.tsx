@@ -3,9 +3,15 @@ import React, { type ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { saveRemote, saveDraft, clearDraft } = vi.hoisted(() => ({ saveRemote: vi.fn(), saveDraft: vi.fn(), clearDraft: vi.fn() }));
+const { saveRemote, saveDraft, clearDraft, publishSaved, summary } = vi.hoisted(() => ({ saveRemote: vi.fn(), saveDraft: vi.fn(), clearDraft: vi.fn(), publishSaved:vi.fn(), summary:vi.fn() }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
+    management:{
+      state:{useMutation:()=>({mutateAsync:vi.fn().mockResolvedValue({content:null,revision:1,publishedRevision:1,hasChanges:false,collections:{templates:[],freeSites:[],submissions:[],templateCategories:[],creativeCategories:[]}}),isPending:false})},
+      save:{useMutation:()=>({mutateAsync:saveRemote,isPending:false})},
+      summary:{useMutation:()=>({mutateAsync:summary,isPending:false})},
+      publish:{useMutation:()=>({mutateAsync:publishSaved,isPending:false})},
+    },
     siteContent: {
       get: { useQuery: () => ({ data: null, isLoading: false }) },
       adminGet: { useMutation: () => ({ mutateAsync: vi.fn().mockResolvedValue(null), isPending: false }) },
@@ -39,14 +45,18 @@ vi.mock("./OwnerFreeSites", () => ({ default: () => <div data-testid="free-sites
 vi.mock("./OwnerCreativeSpace", () => ({ default: () => <div data-testid="creative-admin" /> }));
 vi.mock("./OwnerCreativeCategories", () => ({ default: () => <div data-testid="categories-admin" /> }));
 vi.mock("./OwnerTemplateCategories", () => ({ default: ({ tool }: { tool: string }) => <div data-testid={`template-categories-${tool}`} /> }));
+vi.mock("./OwnerBackups", () => ({ default: () => <div data-testid="backups-admin" /> }));
+vi.mock("./OwnerWorkspaceTrash", () => ({ default: () => <div data-testid="trash-admin" /> }));
 vi.mock("./OwnerCodeWorkspace", () => ({ default: () => <div data-testid="code-admin" /> }));
 
 import OwnerPanel from "./OwnerPanel";
 
 describe("OwnerPanel organization", () => {
   beforeEach(() => { localStorage.clear(); sessionStorage.setItem("abu-kayan-owner-panel", "true");
-    saveRemote.mockReset(); saveRemote.mockImplementation(async (input) => ({ success: true, content: input.content }));
+    saveRemote.mockReset(); saveRemote.mockImplementation(async (input) => ({ success: true, content: input.content,revision:2,hasChanges:true }));
     saveDraft.mockReset(); saveDraft.mockResolvedValue({ success: true, savedAt: Date.now() });
+    publishSaved.mockReset();publishSaved.mockResolvedValue({success:true,publishedRevision:2});
+    summary.mockReset();summary.mockResolvedValue({revision:2,hasChanges:true,changes:[{kind:"settings",label:"الموقع العام",added:0,updated:1,removed:0}]});
     clearDraft.mockReset(); clearDraft.mockResolvedValue({ success: true });
   });
   afterEach(() => { cleanup(); sessionStorage.clear(); localStorage.clear(); });
@@ -102,6 +112,33 @@ describe("OwnerPanel organization", () => {
     fireEvent.click(screen.getByRole("button", { name: "البقاء في الصفحة" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByDisplayValue("مسودة خروج")).toBeTruthy();
+  });
+
+  it("saves privately and requires summary plus explicit confirmation before publishing", async()=>{
+    render(<OwnerPanel/>);
+    fireEvent.change(screen.getByDisplayValue("نخلي فكرتك"),{target:{value:"عنوان خاص حتى الترحيل"}});
+    expect((screen.getByRole("button",{name:"ترحيل التعديلات"}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button",{name:"حفظ التعديلات"}));
+    await waitFor(()=>expect(screen.getByText("كل التعديلات محفوظة")).toBeTruthy());
+    expect(publishSaved).not.toHaveBeenCalled();
+    expect(localStorage.getItem("abu-kayan-site-content-v3")||"").not.toContain("عنوان خاص حتى الترحيل");
+    fireEvent.click(screen.getByRole("button",{name:"ترحيل التعديلات"}));
+    await waitFor(()=>expect(screen.getByRole("dialog",{name:"تأكيد ترحيل التعديلات"})).toBeTruthy());
+    expect(publishSaved).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:"تأكيد النشر للعامة"}));
+    await waitFor(()=>expect(publishSaved).toHaveBeenCalledWith({ownerPin:"770562",revision:2,confirm:true}));
+  });
+  it("retains private edits if publication fails and never falsely reports publication",async()=>{
+    publishSaved.mockRejectedValueOnce(new Error("فشل تأكيد النشر"));
+    render(<OwnerPanel/>);
+    fireEvent.change(screen.getByDisplayValue("نخلي فكرتك"),{target:{value:"مسودة للنشر لاحقًا"}});
+    fireEvent.click(screen.getByRole("button",{name:"حفظ التعديلات"}));
+    await waitFor(()=>expect(screen.getByText("كل التعديلات محفوظة")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button",{name:"ترحيل التعديلات"}));
+    await waitFor(()=>expect(screen.getByRole("button",{name:"تأكيد النشر للعامة"})).toBeTruthy());
+    fireEvent.click(screen.getByRole("button",{name:"تأكيد النشر للعامة"}));
+    await waitFor(()=>expect(screen.getAllByRole("alert").some(item=>item.textContent?.includes("فشل تأكيد النشر"))).toBe(true));
+    expect(screen.getByDisplayValue("مسودة للنشر لاحقًا")).toBeTruthy();
   });
 
 });

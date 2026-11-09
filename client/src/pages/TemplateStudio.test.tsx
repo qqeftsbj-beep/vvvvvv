@@ -10,11 +10,13 @@ vi.mock("@/lib/trpc", () => ({
   trpc: {
     templates: {
       list: { useQuery: () => ({ data: [{ id: 8, text: longTemplateText, imageUrl: "/manus-storage/shared.png", imageName: "shared.png", mediaType: "image", category: "gemini-weddings", createdAt: "2026-09-16T12:00:00.000Z" }], isLoading: false }) },
+      adminList: {useMutation:()=>({mutateAsync:vi.fn().mockResolvedValue([{id:8,tool:"Gemini",text:longTemplateText,imageUrl:"/manus-storage/shared.png",imageName:"shared.png",mediaType:"image",category:"gemini-weddings",createdAt:"2026-09-16T12:00:00.000Z"}])})},
       create: { useMutation: () => ({ mutate, isPending: false }) },
       update: { useMutation: () => ({ mutate, isPending: false }) },
       remove: { useMutation: () => ({ mutate, isPending: false }) },
     },
     templateCategories: {
+      adminWithPassword:{useMutation:()=>({mutateAsync:vi.fn().mockResolvedValue([{id:1,tool:"Gemini",name:"الأعراس والمناسبات",slug:"gemini-weddings",sortOrder:1,isVisible:1}])})},
       list: { useQuery: () => ({ data: [{ id: 1, tool: "Gemini", name: "الأعراس والمناسبات", slug: "gemini-weddings", sortOrder: 1, isVisible: 1 }, { id: 2, tool: "Gemini", name: "تهاني العيد الطويلة", slug: "gemini-eid", sortOrder: 2, isVisible: 1 }], isLoading: false }) },
     },
     useUtils: () => ({ templates: { list: { invalidate: vi.fn() } }, templateCategories: { list: { invalidate: vi.fn() } } }),
@@ -59,7 +61,7 @@ describe("TemplateStudio interactive flow", () => {
     fireEvent.change(textArea, { target: { value: "القالب الأول" } });
     await waitFor(() => expect((textArea as HTMLTextAreaElement).value).toBe("القالب الأول"));
 
-    fireEvent.click(screen.getByRole("button", { name: "حفظ ونشر القالب" }));
+    fireEvent.click(screen.getByRole("button", { name: "حفظ القالب كمسودة" }));
     await waitFor(() => expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull());
     expect(screen.getByRole("button", { name: "إضافة قالب جديد" })).toBeTruthy();
     expect(input.value).toBe("");
@@ -71,7 +73,7 @@ describe("TemplateStudio interactive flow", () => {
     fireEvent.change(secondInput, { target: { files: [new File(["second"], "second.png", { type: "image/png" })] } });
     await waitFor(() => expect(screen.getByText(/second\.png/)).toBeTruthy());
     fireEvent.change(secondTextArea, { target: { value: "القالب الثاني" } });
-    fireEvent.click(screen.getByRole("button", { name: "حفظ ونشر القالب" }));
+    fireEvent.click(screen.getByRole("button", { name: "حفظ القالب كمسودة" }));
     await waitFor(() => expect(screen.queryByPlaceholderText("اكتب التهنئة أو النص الذي تريد الاحتفاظ به...")).toBeNull());
     expect(mutate).toHaveBeenCalledTimes(2);
   });
@@ -91,10 +93,10 @@ describe("TemplateStudio interactive flow", () => {
   it("opens an existing template in the modal and saves without re-uploading its storage URL", async () => {
     window.sessionStorage.setItem("abu-kayan-templates-gemini-owner", "true");
     render(<TemplateStudio toolName="Gemini" toolLabel="Gemini" />);
-    fireEvent.click(screen.getByRole("button", { name: "فتح قالب 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "فتح قالب 1" }));
     const textArea = await screen.findByDisplayValue(longTemplateText);
     fireEvent.change(textArea, { target: { value: "تعديل سريع" } });
-    fireEvent.click(screen.getByRole("button", { name: "حفظ ونشر القالب" }));
+    fireEvent.click(screen.getByRole("button", { name: "حفظ القالب كمسودة" }));
     await waitFor(() => expect(screen.queryByDisplayValue("تعديل سريع")).toBeNull());
     expect(mutate.mock.calls.at(-1)?.[0]).toMatchObject({ id: 8, text: "تعديل سريع" });
     expect(mutate.mock.calls.at(-1)?.[0]).not.toHaveProperty("mediaData");
@@ -117,7 +119,7 @@ describe("TemplateStudio interactive flow", () => {
   it("keeps an edited template when closing and confirms discarding explicitly", async () => {
     window.sessionStorage.setItem("abu-kayan-templates-gemini-owner", "true");
     const { container } = render(<TemplateStudio toolName="Gemini" toolLabel="Gemini" />);
-    fireEvent.click(screen.getByRole("button", { name: "فتح قالب 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "فتح قالب 1" }));
     const dialog = screen.getByRole("dialog", { name: "تعديل قالب محفوظ" });
     expect(container.contains(dialog)).toBe(false);
     fireEvent.change(screen.getByDisplayValue(longTemplateText), { target: { value: "مسودة لم أحفظها" } });

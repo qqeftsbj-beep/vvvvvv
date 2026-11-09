@@ -3,6 +3,107 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { ENV } from "./_core/env";
 
+const workspace = vi.hoisted(() => {
+  type Snapshot = { content: Record<string, unknown>; collections: Record<string, any[]> };
+  const emptyCollections = () => ({ templates: [], freeSites: [], submissions: [], templateCategories: [], creativeCategories: [] });
+  const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  let working: Snapshot = { content: {}, collections: emptyCollections() };
+  let published: Snapshot = clone(working);
+  let revision = 1;
+  let publishedRevision = 1;
+  let trash: any[] = [];
+
+  const reset = () => {
+    working = { content: {}, collections: emptyCollections() };
+    published = clone(working);
+    revision = 1;
+    publishedRevision = 1;
+    trash = [];
+  };
+  const seedCollection = (kind:string,items:any[]) => { working.collections[kind]=clone(items); published=clone(working); revision=1; publishedRevision=1; trash=[]; };
+  const seedTemplates = (templates: any[]) => {
+    working.collections.templates = clone(templates);
+    published = clone(working);
+    revision = 1;
+    publishedRevision = 1;
+    trash = [];
+  };
+  const state = () => ({
+    ...clone(working),
+    revision,
+    publishedRevision,
+    savedAt: Date.now(),
+    hasChanges: revision !== publishedRevision,
+    trash: clone(trash),
+  });
+
+  const listPublishedCollection = vi.fn(async (kind: string) => clone(published.collections[kind] || []));
+  const listWorkingCollection = vi.fn(async (kind: string) => clone(working.collections[kind] || []));
+  const createWorkingEntity = vi.fn(async (kind: string, value: Record<string, unknown>) => {
+    const items = working.collections[kind] || (working.collections[kind] = []);
+    const id = value.id ?? (items.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1);
+    const item = { ...clone(value), id };
+    items.push(item);
+    revision += 1;
+    return clone(item);
+  });
+  const updateWorkingEntity = vi.fn(async (kind: string, id: number, patch: Record<string, unknown>) => {
+    const items = working.collections[kind] || [];
+    const index = items.findIndex(item => Number(item.id) === id);
+    if (index < 0) throw new Error("Workspace item not found.");
+    items[index] = { ...items[index], ...clone(patch), id };
+    revision += 1;
+    return clone(items[index]);
+  });
+  const removeWorkingEntity = vi.fn(async (kind: string, id: number) => {
+    const items = working.collections[kind] || [];
+    const index = items.findIndex(item => Number(item.id) === id);
+    if (index < 0) return { success: true as const };
+    const [value] = items.splice(index, 1);
+    revision += 1;
+    trash.unshift({ id: `trash:${revision}:${id}`, kind: kind.slice(0, -1), title: value.name || value.text || String(id), source: `collections.${kind}`, deletedAt: Date.now(), value: clone(value), index });
+    return { success: true as const };
+  });
+  const publishWorkspace = vi.fn(async (expectedRevision: number, confirm: boolean) => {
+    if (!confirm) throw new Error("Publishing requires explicit confirmation.");
+    if (expectedRevision !== revision) throw new Error("Workspace revision is stale; reload before publishing.");
+    published = clone(working);
+    publishedRevision = revision;
+    return { success: true as const, publishedRevision, backupId: 1 };
+  });
+  const listTrash = vi.fn(async () => clone(trash));
+  const getWorkingState = vi.fn(async () => state());
+  const getPublishedSnapshot = vi.fn(async () => clone(published));
+
+  return {
+    reorderWorkingEntities: vi.fn(async(kind:string,ids:number[]) => {for(const [index,id] of Array.from(ids.entries()))await updateWorkingEntity(kind,id,{sortOrder:index});return listWorkingCollection(kind);}),
+    materializePublishedSnapshot: (value:any)=>value,
+    reset,
+    seedTemplates,
+    seedCollection,
+    state,
+    listPublishedCollection,
+    listWorkingCollection,
+    createWorkingEntity,
+    updateWorkingEntity,
+    removeWorkingEntity,
+    publishWorkspace,
+    listTrash,
+    getWorkingState,
+    getPublishedSnapshot,
+    backupWorkspace: vi.fn(),
+    deleteVersion: vi.fn(),
+    getPublishedPage: vi.fn(),
+    getWorkingSnapshot: vi.fn(),
+    listHistory: vi.fn(),
+    purgeTrash: vi.fn(async () => ({success:true as const})),
+    readVersion: vi.fn(),
+    restoreTrash: vi.fn(async () => ({success:true as const})),
+    restoreVersion: vi.fn(),
+    savePrivateSiteContent: vi.fn(),
+  };
+});
+
 const mocks = vi.hoisted(() => ({
   listSharedTemplates: vi.fn(),
   createSharedTemplate: vi.fn(),
@@ -23,22 +124,23 @@ const mocks = vi.hoisted(() => ({
 }));
 const { listSharedTemplates, createSharedTemplate, updateSharedTemplate, deleteSharedTemplate, listDeletedSharedTemplates, restoreSharedTemplate, purgeSharedTemplate, cleanupDeletedSharedTemplates, getTemplateRetentionDays, setTemplateRetentionDays, listVisibleFreeSites, listAllFreeSites, createFreeSite, updateFreeSite, deleteFreeSite, storagePut } = mocks;
 
+vi.mock("./managementWorkspace", () => workspace);
 vi.mock("./db", () => ({
-  listSharedTemplates: mocks.listSharedTemplates,
-  createSharedTemplate: mocks.createSharedTemplate,
-  updateSharedTemplate: mocks.updateSharedTemplate,
-  deleteSharedTemplate: mocks.deleteSharedTemplate,
-  listDeletedSharedTemplates: mocks.listDeletedSharedTemplates,
-  restoreSharedTemplate: mocks.restoreSharedTemplate,
-  purgeSharedTemplate: mocks.purgeSharedTemplate,
-  cleanupDeletedSharedTemplates: mocks.cleanupDeletedSharedTemplates,
-  getTemplateRetentionDays: mocks.getTemplateRetentionDays,
-  setTemplateRetentionDays: mocks.setTemplateRetentionDays,
-  listVisibleFreeSites: mocks.listVisibleFreeSites,
-  listAllFreeSites: mocks.listAllFreeSites,
-  createFreeSite: mocks.createFreeSite,
-  updateFreeSite: mocks.updateFreeSite,
-  deleteFreeSite: mocks.deleteFreeSite,
+  listSharedTemplates: vi.fn(async (tool:string,category?:string) => { const rows=await workspace.listPublishedCollection("templates"); const cats=await workspace.listPublishedCollection("templateCategories");const relevant=cats.filter((row:any)=>row.tool===tool);const hidden=new Set(relevant.filter((row:any)=>row.isVisible!==1).map((row:any)=>row.slug));return rows.filter((row:any)=>row.tool===tool&&(!category?(!row.category||row.category==="other"||!hidden.has(row.category)):row.category===category)).sort((a:any,b:any)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime()); }),
+  createSharedTemplate: vi.fn(async (input:any) => workspace.createWorkingEntity("templates",input)),
+  updateSharedTemplate: vi.fn(async (id:number,input:any) => workspace.updateWorkingEntity("templates",id,input)),
+  deleteSharedTemplate: vi.fn(async (id:number) => workspace.removeWorkingEntity("templates",id)),
+  listDeletedSharedTemplates: vi.fn(async () => (await workspace.listTrash()).filter((entry:any)=>entry.source==="shared_templates"||entry.source==="collections.templates").map((entry:any)=>({...entry.value,deletedAt:new Date(entry.deletedAt),trashId:entry.id}))),
+  restoreSharedTemplate: vi.fn(async (id:number) => {const entry=(await workspace.listTrash()).find((item:any)=>Number(item.value?.id)===id);return entry?workspace.restoreTrash(entry.id):{success:true};}),
+  purgeSharedTemplate: vi.fn(async (id:number,confirm:boolean) => {const entry=(await workspace.listTrash()).find((item:any)=>Number(item.value?.id)===id);return entry?workspace.purgeTrash(entry.id,confirm):{success:true};}),
+  cleanupDeletedSharedTemplates: vi.fn(async () => ({success:true,deleted:0})),
+  getTemplateRetentionDays: vi.fn(async()=>30),
+  setTemplateRetentionDays: vi.fn(async(retentionDays:number)=>({retentionDays})),
+  listVisibleFreeSites: vi.fn(async()=> (await workspace.listPublishedCollection("freeSites")).filter((row:any)=>row.isVisible===1).sort((a:any,b:any)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime())),
+  listAllFreeSites: vi.fn(async()=>workspace.listWorkingCollection("freeSites")),
+  createFreeSite: vi.fn(async(input:any)=>workspace.createWorkingEntity("freeSites",{...input,id:input.id??7})),
+  updateFreeSite: vi.fn(async(id:number,input:any)=>workspace.updateWorkingEntity("freeSites",id,input)),
+  deleteFreeSite: vi.fn(async(id:number)=>workspace.removeWorkingEntity("freeSites",id)),
 }));
 vi.mock("./storage", () => ({ storagePut: mocks.storagePut }));
 
@@ -53,6 +155,7 @@ function context(user?: TrpcContext["user"]): TrpcContext {
 const admin = { id: 1, openId: "admin", role: "admin", name: "Admin", email: null, loginMethod: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } as const;
 const regularUser = { id: 2, openId: "user", role: "user", name: "User", email: null, loginMethod: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } as const;
 const templatePassword = ENV.templatePassword;
+const ownerPin = ENV.ownerPin;
 
 const createInput = (overrides: Record<string, unknown> = {}) => ({
   tool: "Gemini" as const,
@@ -64,106 +167,89 @@ const createInput = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("shared templates", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("lists templates publicly for a selected tool", async () => {
-    listSharedTemplates.mockResolvedValue([{ id: 2, tool: "Gemini" }]);
-    const visitorSession = appRouter.createCaller(context());
-    const result = await visitorSession.templates.list({ tool: "Gemini" });
-    expect(result).toEqual([{ id: 2, tool: "Gemini" }]);
-    expect(listSharedTemplates).toHaveBeenCalledWith("Gemini");
-  });
-
-  it("preserves separate templates even when their image and text match", async () => {
-    const matchingTemplates = [{ id: 4, tool: "Gemini", text: "نفس النص", imageUrl: "/one.png" }, { id: 5, tool: "Gemini", text: "نفس النص", imageUrl: "/one.png" }];
-    listSharedTemplates.mockResolvedValue(matchingTemplates);
-    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toEqual(matchingTemplates);
-  });
-
-  it("syncs two consecutive templates to a separate visitor session in newest-first order and keeps the other after deletion", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    workspace.reset();
     storagePut.mockResolvedValue({ key: "shared/x.png", url: "/manus-storage/shared/x.png" });
-    const first = { id: 3, tool: "Gemini", text: "القالب الأول" };
-    const second = { id: 4, tool: "Gemini", text: "القالب الأحدث" };
-    createSharedTemplate.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
-    listSharedTemplates.mockResolvedValue([second, first]);
-    deleteSharedTemplate.mockResolvedValue({ success: true });
-
-    const ownerSession = appRouter.createCaller(context(admin));
-    await ownerSession.templates.create(createInput({ text: first.text, imageName: "first.png" }));
-    await ownerSession.templates.create(createInput({ text: second.text, imageName: "second.png" }));
-
-    const visitorSession = appRouter.createCaller(context());
-    await expect(visitorSession.templates.list({ tool: "Gemini" })).resolves.toEqual([second, first]);
-    await expect(ownerSession.templates.remove({ id: second.id, ownerPassword: templatePassword })).resolves.toEqual({ success: true });
-    expect(deleteSharedTemplate).toHaveBeenCalledWith(second.id);
   });
 
-  it("syncs an admin-created template to a separate visitor session", async () => {
-    storagePut.mockResolvedValue({ key: "shared/x.png", url: "/manus-storage/shared/x.png" });
-    const saved = { id: 3, tool: "Gemini", text: "نص جديد" };
-    createSharedTemplate.mockResolvedValue(saved);
-    listSharedTemplates.mockResolvedValue([saved]);
-
+  it("keeps a newly created template private until explicit publish", async () => {
+    const baseline = { id: 1, tool: "Gemini", text: "الأساسي", imageUrl: "/baseline.png" };
+    workspace.seedTemplates([baseline]);
     const ownerSession = appRouter.createCaller(context(admin));
-    await ownerSession.templates.create(createInput({ text: "نص جديد" }));
 
-    const visitorSession = appRouter.createCaller(context());
-    await expect(visitorSession.templates.list({ tool: "Gemini" })).resolves.toEqual([saved]);
-    expect(listSharedTemplates).toHaveBeenCalledWith("Gemini");
+    const created = await ownerSession.templates.create(createInput({ text: "خاص" }));
+    expect(created).toMatchObject({ id: 2, text: "خاص" });
+    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toEqual([baseline]);
+    await expect(ownerSession.templates.adminList({ tool: "Gemini", ownerPassword: templatePassword })).resolves.toContainEqual(expect.objectContaining({ id: 2, text: "خاص" }));
+
+    const state = workspace.state();
+    await expect(ownerSession.management.publish({ ownerPin, revision: state.revision, confirm: true })).resolves.toMatchObject({ publishedRevision: state.revision });
+    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toContainEqual(expect.objectContaining({ id: 2, text: "خاص" }));
+    expect(workspace.createWorkingEntity).toHaveBeenCalledWith("templates", expect.objectContaining({ text: "خاص", createdByOpenId: "admin" }));
   });
 
-  it("rejects an incorrect template password", async () => {
+  it("edits the working template while preserving existing media until publish", async () => {
+    const original = { id: 3, tool: "Gemini", text: "قديم", imageUrl: "/keep.png", imageKey: "keep.png", imageName: "keep.png" };
+    workspace.seedTemplates([original]);
+    const ownerSession = appRouter.createCaller(context(admin));
+
+    const edited = await ownerSession.templates.update({ id: 3, text: "جديد", ownerPassword: templatePassword });
+    expect(edited).toMatchObject({ id: 3, text: "جديد", imageUrl: "/keep.png", imageKey: "keep.png" });
+    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toEqual([original]);
+    await expect(ownerSession.templates.adminList({ tool: "Gemini", ownerPassword: templatePassword })).resolves.toEqual([expect.objectContaining({ id: 3, text: "جديد", imageUrl: "/keep.png" })]);
+
+    const state = workspace.state();
+    await ownerSession.management.publish({ ownerPin, revision: state.revision, confirm: true });
+    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toEqual([expect.objectContaining({ id: 3, text: "جديد", imageUrl: "/keep.png" })]);
+    expect(workspace.updateWorkingEntity).toHaveBeenCalledWith("templates", 3, expect.objectContaining({ text: "جديد", createdByOpenId: "admin" }));
+  });
+
+  it("keeps duplicate templates as separate working and published entities", async () => {
+    const ownerSession = appRouter.createCaller(context(admin));
+    const first = await ownerSession.templates.create(createInput({ text: "نفس النص", imageName: "same.png" }));
+    const second = await ownerSession.templates.create(createInput({ text: "نفس النص", imageName: "same.png" }));
+    expect(first.id).not.toBe(second.id);
+    await expect(ownerSession.templates.adminList({ tool: "Gemini", ownerPassword: templatePassword })).resolves.toHaveLength(2);
+    await ownerSession.management.publish({ ownerPin, revision: workspace.state().revision, confirm: true });
+    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toHaveLength(2);
+  });
+
+  it("moves deletion to central private trash and exposes it publicly only after publish", async () => {
+    const template = { id: 9, tool: "Gemini", text: "للحذف", imageUrl: "/delete.png" };
+    workspace.seedTemplates([template]);
+    const ownerSession = appRouter.createCaller(context(admin));
+
+    await expect(ownerSession.templates.remove({ id: 9, ownerPassword: templatePassword })).resolves.toEqual({ success: true });
+    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toEqual([template]);
+    await expect(ownerSession.templates.adminList({ tool: "Gemini", ownerPassword: templatePassword })).resolves.toEqual([]);
+    await expect(ownerSession.management.trash({ ownerPin })).resolves.toEqual([expect.objectContaining({ value: template, source: "collections.templates" })]);
+
+    await ownerSession.management.publish({ ownerPin, revision: workspace.state().revision, confirm: true });
+    await expect(appRouter.createCaller(context()).templates.list({ tool: "Gemini" })).resolves.toEqual([]);
+    expect(workspace.removeWorkingEntity).toHaveBeenCalledWith("templates", 9);
+  });
+
+  it("blocks unauthorized template writes and publishing", async () => {
     const visitorSession = appRouter.createCaller(context());
     await expect(visitorSession.templates.create(createInput({ ownerPassword: "wrong" }))).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(visitorSession.templates.update({ id: 3, text: "تعديل", ownerPassword: "wrong" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(visitorSession.templates.remove({ id: 3, ownerPassword: "wrong" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(visitorSession.management.publish({ ownerPin: "wrong", revision: 1, confirm: true })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(workspace.createWorkingEntity).not.toHaveBeenCalled();
+    expect(workspace.updateWorkingEntity).not.toHaveBeenCalled();
+    expect(workspace.removeWorkingEntity).not.toHaveBeenCalled();
   });
 
-  it("updates and removes a template with the correct password", async () => {
-    updateSharedTemplate.mockResolvedValue({ id: 3, text: "تعديل المالك" });
-    deleteSharedTemplate.mockResolvedValue({ success: true });
+  it("protects legacy recycle-bin operations and forwards retention settings", async () => {
+    workspace.seedTemplates([{id:9,tool:"Gemini",text:"عنصر محذوف"}]); await workspace.removeWorkingEntity("templates",9);
     const ownerSession = appRouter.createCaller(context(admin));
-
-    await expect(ownerSession.templates.update({ id: 3, text: "تعديل المالك", ownerPassword: templatePassword })).resolves.toEqual({ id: 3, text: "تعديل المالك" });
-    await expect(ownerSession.templates.remove({ id: 3, ownerPassword: templatePassword })).resolves.toEqual({ success: true });
-    expect(updateSharedTemplate).toHaveBeenCalledWith(3, expect.objectContaining({ text: "تعديل المالك", createdByOpenId: "admin" }));
-    expect(deleteSharedTemplate).toHaveBeenCalledWith(3);
-  });
-
-  it("uploads and creates a template with the correct password", async () => {
-    storagePut.mockResolvedValue({ key: "shared/x.png", url: "/manus-storage/shared/x.png" });
-    createSharedTemplate.mockResolvedValue({ id: 3, tool: "Gemini" });
-    const result = await appRouter.createCaller(context(admin)).templates.create(createInput());
-    expect(result).toEqual({ id: 3, tool: "Gemini" });
-    expect(storagePut).toHaveBeenCalled();
-    expect(createSharedTemplate).toHaveBeenCalledWith(expect.objectContaining({ tool: "Gemini", imageKey: "shared/x.png", imageUrl: "/manus-storage/shared/x.png", createdByOpenId: "admin" }));
-  });
-
-  it("allows password owner flow without an OAuth session", async () => {
-    storagePut.mockResolvedValue({ key: "shared/password.png", url: "/manus-storage/password.png" });
-    createSharedTemplate.mockResolvedValue({ id: 11, tool: "Gemini" });
-    const visitorSession = appRouter.createCaller(context());
-    await expect(visitorSession.templates.create(createInput({ text: "حفظ بكلمة المرور", imageName: "password.png" }))).resolves.toEqual({ id: 11, tool: "Gemini" });
-  });
-
-  it("protects recycle-bin operations and forwards retention settings", async () => {
-    const deleted = [{ id: 9, tool: "Gemini", deletedAt: new Date() }];
-    listDeletedSharedTemplates.mockResolvedValue(deleted);
-    restoreSharedTemplate.mockResolvedValue({ success: true });
-    purgeSharedTemplate.mockResolvedValue({ success: true });
-    cleanupDeletedSharedTemplates.mockResolvedValue({ success: true, deleted: 2 });
-    getTemplateRetentionDays.mockResolvedValue(60);
-    setTemplateRetentionDays.mockResolvedValue({ retentionDays: 180 });
-    const ownerSession = appRouter.createCaller(context(admin));
-    await expect(ownerSession.templates.recycleBin()).resolves.toEqual(deleted);
-    await expect(ownerSession.templates.restore({ id: 9 })).resolves.toEqual({ success: true });
-    await expect(ownerSession.templates.purge({ id: 9 })).resolves.toEqual({ success: true });
-    await expect(ownerSession.templates.cleanup({ retentionDays: 180 })).resolves.toEqual({ success: true, deleted: 2 });
-    await expect(ownerSession.templates.retentionDays()).resolves.toBe(60);
+    await expect(ownerSession.templates.recycleBin()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({id:9,text:"عنصر محذوف"})]));
+    await expect(ownerSession.templates.restore({ id: 9 })).resolves.toMatchObject({ success: true });
+    await expect(ownerSession.templates.purge({ id: 9, confirm: true })).resolves.toMatchObject({ success: true });
+    await expect(ownerSession.templates.cleanup({ retentionDays: 180 })).resolves.toEqual({ success: true, deleted: 0 });
+    await expect(ownerSession.templates.retentionDays()).resolves.toBe(30);
     await expect(ownerSession.templates.setRetentionDays({ retentionDays: 180 })).resolves.toEqual({ retentionDays: 180 });
-    expect(cleanupDeletedSharedTemplates).toHaveBeenCalledWith(180);
-    expect(setTemplateRetentionDays).toHaveBeenCalledWith(180);
-
     const visitorSession = appRouter.createCaller(context(regularUser));
     await expect(visitorSession.templates.recycleBin()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(visitorSession.templates.restore({ id: 9 })).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -171,8 +257,7 @@ describe("shared templates", () => {
 
   it("lists published free sites publicly and keeps management protected", async () => {
     const published = [{ id: 1, name: "Canva", isVisible: 1, sortOrder: 0 }];
-    listVisibleFreeSites.mockResolvedValue(published);
-    listAllFreeSites.mockResolvedValue([...published, { id: 2, name: "مخفي", isVisible: 0, sortOrder: 1 }]);
+    workspace.seedCollection("freeSites", [...published, { id: 2, name: "مخفي", isVisible: 0, sortOrder: 1 }]);
     const visitorSession = appRouter.createCaller(context());
     await expect(visitorSession.freeSites.list()).resolves.toEqual(published);
     await expect(visitorSession.freeSites.adminList()).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -187,13 +272,25 @@ describe("shared templates", () => {
     deleteFreeSite.mockResolvedValue({ success: true });
     listAllFreeSites.mockResolvedValue([saved]);
     const ownerSession = appRouter.createCaller(context(admin));
-    await expect(ownerSession.freeSites.create({ name: "Canva", url: "https://canva.com", description: "تصميم", additionalText: "", imageData: "data:image/png;base64,AA==", imageName: "canva.png", sortOrder: 0, isVisible: true })).resolves.toEqual(saved);
+    await expect(ownerSession.freeSites.create({ name: "Canva", url: "https://canva.com", description: "تصميم", additionalText: "", imageData: "data:image/png;base64,AA==", imageName: "canva.png", sortOrder: 0, isVisible: true })).resolves.toMatchObject(saved);
     await expect(ownerSession.freeSites.update({ id: 7, name: "Canva Pro", clearImage: true })).resolves.toMatchObject({ name: "Canva Pro" });
     await expect(ownerSession.freeSites.setVisibility({ id: 7, isVisible: false })).resolves.toMatchObject({ name: "Canva Pro" });
-    await expect(ownerSession.freeSites.reorder({ ids: [7] })).resolves.toEqual([saved]);
+    await expect(ownerSession.freeSites.reorder({ ids: [7] })).resolves.toContainEqual(expect.objectContaining({id:7,name:"Canva Pro",isVisible:0}));
     await expect(ownerSession.freeSites.remove({ id: 7 })).resolves.toEqual({ success: true });
-    expect(createFreeSite).toHaveBeenCalledWith(expect.objectContaining({ name: "Canva", imageKey: "free-sites/canva.png" }));
-    expect(updateFreeSite).toHaveBeenCalledWith(7, expect.objectContaining({ imageUrl: null, imageKey: null }));
-    expect(deleteFreeSite).toHaveBeenCalledWith(7);
+    expect(workspace.createWorkingEntity).toHaveBeenCalledWith("freeSites",expect.objectContaining({ name: "Canva", imageKey: "free-sites/canva.png" }));
+    expect(workspace.updateWorkingEntity).toHaveBeenCalledWith("freeSites",7,expect.objectContaining({ imageUrl: null, imageKey: null }));
+    expect(workspace.removeWorkingEntity).toHaveBeenCalledWith("freeSites",7);
+  });
+
+  it("lets the authenticated owner PIN manage free sites without OAuth while rejecting an invalid PIN", async () => {
+    workspace.seedCollection("freeSites", [{ id: 11, name: "موقع محفوظ", isVisible: 1, sortOrder: 0 }]);
+    const owner = appRouter.createCaller(context());
+    await expect(owner.freeSites.adminListWithPin({ ownerPin: "invalid" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(owner.freeSites.adminListWithPin({ ownerPin })).resolves.toHaveLength(1);
+    await expect(owner.freeSites.setVisibilityWithPin({ ownerPin, id: 11, isVisible: false })).resolves.toMatchObject({ isVisible: 0 });
+    await expect(owner.freeSites.createWithPin({ ownerPin, name: "موقع جديد", sortOrder: 1, isVisible: true })).resolves.toMatchObject({ name: "موقع جديد" });
+    const rows = await owner.freeSites.adminListWithPin({ ownerPin });
+    await expect(owner.freeSites.reorderWithPin({ ownerPin, ids: rows.map(row => row.id).reverse() })).resolves.toHaveLength(2);
+    await expect(owner.freeSites.removeWithPin({ ownerPin, id: 11 })).resolves.toEqual({ success: true });
   });
 });
