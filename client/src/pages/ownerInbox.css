@@ -1,0 +1,32 @@
+.inbox-card .owner-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.inbox-refresh,
+.inbox-pagination button,
+.inbox-import { display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+.inbox-refresh { border: 1px solid #343b48; padding: 8px 10px; background: transparent; color: #c6a45d; font: inherit; font-size: 10px; }
+.inbox-refresh:disabled,
+.inbox-pagination button:disabled,
+.inbox-import:disabled { cursor: not-allowed; opacity: .55; }
+.inbox-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 10px 12px; border: 1px solid #a85d5d; background: rgba(168,93,93,.1); color: #f3c1aa; font-size: 11px; line-height: 1.7; }
+.inbox-error button { border: 1px solid currentColor; padding: 5px 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; white-space: nowrap; }
+.inbox-server-lead { border-color: rgba(198,164,93,.42); }
+.inbox-server-lead > div:first-child > span { color: #c6a45d; }
+.inbox-local-card { margin-top: 18px; }
+.inbox-local-card details > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 0; color: #f7f3ea; cursor: pointer; list-style: none; }
+.inbox-local-card details > summary::-webkit-details-marker { display: none; }
+.inbox-local-card details > summary > span { display: inline-flex; align-items: center; gap: 7px; color: #c6a45d; font-size: 11px; }
+.inbox-local-card details > summary b { color: #f7f3ea; font-size: 18px; }
+.inbox-local-card details > summary b small { margin-inline-start: 4px; color: #667085; font-size: 10px; font-weight: 400; }
+.inbox-local-note { margin: 13px 0 10px; color: #9fa9b8; font-size: 11px; line-height: 1.8; }
+.inbox-import { min-height: 38px; margin-top: 4px; padding: 0 12px; border: 1px solid #c6a45d; background: #c6a45d; color: #0b0e14; font: inherit; font-size: 10px; font-weight: 700; }
+.inbox-local-lead { border-style: dashed; opacity: .92; }
+.inbox-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: #9fa9b8; font-size: 10px; }
+.inbox-pagination button { min-height: 34px; padding: 0 9px; border: 1px solid #343b48; background: transparent; color: #c6a45d; font: inherit; }
+.inbox-spin { animation: inbox-spin 800ms linear infinite; }
+@keyframes inbox-spin { to { transform: rotate(360deg); } }
+@media (max-width: 650px) {
+  .inbox-card .owner-card-heading { align-items: stretch; flex-direction: column; }
+  .inbox-refresh { align-self: flex-start; }
+  .inbox-error { align-items: stretch; flex-direction: column; }
+  .inbox-pagination { gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .inbox-spin { animation: none; } }

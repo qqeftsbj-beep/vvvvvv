@@ -47,11 +47,19 @@ vi.mock("./OwnerCreativeCategories", () => ({ default: () => <div data-testid="c
 vi.mock("./OwnerTemplateCategories", () => ({ default: ({ tool }: { tool: string }) => <div data-testid={`template-categories-${tool}`} /> }));
 vi.mock("./OwnerBackups", () => ({ default: () => <div data-testid="backups-admin" /> }));
 vi.mock("./OwnerWorkspaceTrash", () => ({ default: () => <div data-testid="trash-admin" /> }));
+vi.mock("./OwnerNotifications", () => ({ default: ({ onOpenSubmissions, onOpenRequest }: { onOpenSubmissions: () => void; onOpenRequest: (url: string) => void }) => <><button type="button" onClick={onOpenSubmissions}>الإشعارات</button><button type="button" onClick={() => onOpenRequest("/owner/inbox")}>فتح إشعار الطلب</button></> }));
 vi.mock("./OwnerCodeWorkspace", () => ({ default: () => <div data-testid="code-admin" /> }));
 
 import OwnerPanel from "./OwnerPanel";
 
 describe("OwnerPanel organization", () => {
+  it("opens submissions from owner notifications without saving or publishing", () => {
+    render(<OwnerPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "الإشعارات" }));
+    expect(screen.getByRole("tab", { name: "المشاركات" }).getAttribute("aria-selected")).toBe("true");
+    expect(saveRemote).not.toHaveBeenCalled();
+    expect(publishSaved).not.toHaveBeenCalled();
+  });
   beforeEach(() => { localStorage.clear(); sessionStorage.setItem("abu-kayan-owner-panel", "true");
     saveRemote.mockReset(); saveRemote.mockImplementation(async (input) => ({ success: true, content: input.content,revision:2,hasChanges:true }));
     saveDraft.mockReset(); saveDraft.mockResolvedValue({ success: true, savedAt: Date.now() });
@@ -100,6 +108,14 @@ describe("OwnerPanel organization", () => {
     expect(screen.getByDisplayValue("لا تفقد هذا التعديل")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }));
     await waitFor(() => expect(screen.getByText("كل التعديلات محفوظة")).toBeTruthy());
+  });
+  it("guards unsaved edits when opening an inbox notification", () => {
+    render(<OwnerPanel />);
+    fireEvent.change(screen.getByDisplayValue("نخلي فكرتك"), { target: { value: "لا تضيع مسودتي" } });
+    fireEvent.click(screen.getByRole("button", { name: "فتح إشعار الطلب" }));
+    expect(screen.getByRole("dialog", { name: "تعديلات غير محفوظة" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "البقاء في الصفحة" }));
+    expect(screen.getByDisplayValue("لا تضيع مسودتي")).toBeTruthy();
   });
   it("guards leaving and allows staying without discarding edits", () => {
     const { container } = render(<OwnerPanel />);

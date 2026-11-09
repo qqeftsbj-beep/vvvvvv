@@ -1,4 +1,4 @@
-import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, index, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /** Core user table backing auth flow. */
 export const users = mysqlTable("users", {
@@ -78,3 +78,55 @@ export type OwnerEditorDraft = typeof ownerEditorDrafts.$inferSelect; export typ
 export type ManagementWorkspace = typeof managementWorkspaces.$inferSelect;
 export type ManagementTrash = typeof managementTrash.$inferSelect;
 export type ManagementBackup = typeof managementBackups.$inferSelect;
+
+/** Owner-only notification state; notification keys are submission:<id> or request:<id>. */
+export const ownerNotificationReads = mysqlTable("owner_notification_reads", {
+  notificationKey: varchar("notificationKey", { length: 191 }).primaryKey(),
+  readAt: bigint("readAt", { mode: "number" }).notNull(),
+});
+
+/** Singleton owner notification preferences. Values remain durable but never create notifications. */
+export const ownerNotificationPreferences = mysqlTable(
+  "owner_notification_preferences",
+  {
+    id: int("id").primaryKey(),
+    showSubmissions: int("showSubmissions").default(1).notNull(),
+    showRequests: int("showRequests").default(1).notNull(),
+    showToast: int("showToast").default(1).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  }
+);
+
+/** Durable public customer inbox records. The caller-supplied id is the idempotency key when present. */
+export const customerRequests = mysqlTable(
+  "customer_requests",
+  {
+    id: varchar("id", { length: 128 }).primaryKey(),
+    name: varchar("name", { length: 150 }).notNull(),
+    phone: varchar("phone", { length: 20 }).notNull(),
+    request: mediumtext("request").notNull(),
+    source: varchar("source", { length: 150 }).notNull(),
+    status: mysqlEnum("status", ["new", "contacted", "completed"])
+      .default("new")
+      .notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => ({
+    createdAtIdx: index("customer_requests_created_at_idx").on(
+      table.createdAt,
+      table.id
+    ),
+    statusCreatedAtIdx: index("customer_requests_status_created_at_idx").on(
+      table.status,
+      table.createdAt,
+      table.id
+    ),
+    nameIdx: index("customer_requests_name_idx").on(table.name),
+  })
+);
+
+export type OwnerNotificationRead = typeof ownerNotificationReads.$inferSelect;
+export type OwnerNotificationPreferences =
+  typeof ownerNotificationPreferences.$inferSelect;
+export type CustomerRequestRow = typeof customerRequests.$inferSelect;

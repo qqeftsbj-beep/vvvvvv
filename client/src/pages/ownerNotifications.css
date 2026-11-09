@@ -1,0 +1,29 @@
+.owner-notification-bell{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--gold,#dcc070);background:transparent;color:inherit;padding:8px 11px;border-radius:14px;min-height:44px;font:inherit;font-size:12px;position:relative;cursor:pointer}
+.owner-notification-bell b{display:grid;place-items:center;min-width:22px;min-height:22px;border-radius:20px;padding:2px 5px;background:var(--gold,#dcc070);color:#10233f;font-size:11px}
+.owner-notification-bell i{color:#e78686;font-weight:700;font-style:normal}
+.owner-notifications-modal{width:min(620px,calc(100vw - 24px));color:var(--ink,#f5efdb)}
+.owner-notifications-summary{display:grid;gap:6px;margin-bottom:14px}
+.owner-notifications-summary strong{font-size:18px;color:var(--gold,#dcc070)}
+.owner-notifications-summary small,.owner-notifications-settings small{font-size:12px;line-height:1.8;opacity:.8}
+.owner-notifications-actions,.owner-notifications-filters,.owner-notification-item-actions,.owner-notifications-pagination{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;align-items:center}
+.owner-notifications-modal button{font:inherit;font-size:12px;line-height:1.6;min-height:44px;padding:8px 11px;border-radius:10px;border:1px solid color-mix(in srgb,var(--gold,#dcc070) 40%,transparent);background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:normal}
+.owner-notifications-modal button:disabled{opacity:.45;cursor:default}
+.owner-notifications-modal button:focus-visible,.owner-notification-bell:focus-visible{outline:2px solid var(--gold,#dcc070);outline-offset:3px}
+.owner-notifications-filters button[aria-pressed=true]{background:var(--gold,#dcc070);color:#10233f;border-color:var(--gold,#dcc070)}
+.owner-notifications-list{display:grid;gap:10px}
+.owner-notification-item{display:grid;gap:8px;padding:14px;border:1px solid color-mix(in srgb,var(--gold,#dcc070) 25%,transparent);border-radius:14px;overflow-wrap:anywhere}
+.owner-notification-item.is-unread{border-inline-start:3px solid var(--gold,#dcc070);background:color-mix(in srgb,var(--gold,#dcc070) 6%,transparent)}
+.owner-notification-item span{font-size:11px;color:var(--gold,#dcc070)}
+.owner-notification-item h3{font-size:14px;line-height:1.8;margin:5px 0;color:inherit}
+.owner-notification-item p{font-size:12px;line-height:1.9;white-space:pre-wrap;margin:6px 0}
+.owner-notification-item time{font-size:11px;opacity:.72}
+.owner-notification-item-actions{margin:0}
+.owner-notifications-error{color:#e99393;line-height:1.8;font-size:12px;padding:10px;border:1px solid #d06c6c;border-radius:10px;overflow-wrap:anywhere}
+.owner-notifications-empty{font-size:13px;padding:20px 0;line-height:1.8}
+.owner-notifications-pagination{justify-content:space-between;font-size:12px}
+.owner-notifications-settings{border-top:1px solid color-mix(in srgb,var(--gold,#dcc070) 30%,transparent);margin-top:14px;padding-top:12px}
+.owner-notifications-settings summary{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:44px;color:var(--gold,#dcc070);font-size:13px;font-weight:700}
+.owner-notifications-settings>div{display:grid;gap:6px;margin:10px 0}
+.owner-notifications-settings label{display:flex;align-items:center;gap:10px;min-height:44px;font-size:12px;line-height:1.8}
+.owner-notifications-settings input[type=checkbox]{width:18px;height:18px;flex-shrink:0;accent-color:var(--gold,#dcc070)}
+@media(max-width:480px){.owner-notifications-modal button{flex-grow:1}.owner-notifications-filters button{flex:1 1 calc(50% - 8px)}.owner-notification-bell{padding:7px 9px}.owner-notifications-modal .owner-modal-content{padding:14px}}

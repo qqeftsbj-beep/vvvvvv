@@ -5,6 +5,8 @@ import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { ownerProcedure, publicProcedure, router } from "./_core/trpc";
+import { ownerNotificationsRouter } from "./ownerNotifications";
+import { customerInboxRouter } from "./customerInbox";
 import { ENV } from "./_core/env";
 import { cleanupDeletedSharedTemplates, createFreeSite, deleteFreeSite, deleteSharedTemplate, getTemplateRetentionDays, listAllFreeSites, listDeletedSharedTemplates, listSharedTemplates, listVisibleFreeSites, purgeSharedTemplate, restoreSharedTemplate, setTemplateRetentionDays, updateFreeSite, listApprovedCreativeSubmissions, listAllCreativeSubmissions, createCreativeSubmission, getSiteContent, saveSiteContent, listCreativeCategories, searchOwnerContent, listTemplateCategories } from "./db";
 import { storagePut } from "./storage";
@@ -328,6 +330,8 @@ export const appRouter = router({
       return reorderWorkingEntities("freeSites", input.ids);
     }),
   }),
+  ownerNotifications: ownerNotificationsRouter,
+  customerInbox: customerInboxRouter,
 });
 
 export type AppRouter = typeof appRouter;
