@@ -2,16 +2,18 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import mysql, { type Connection } from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import fs from "node:fs";
+import { createSharedItem, updateSharedItem, pageSharedItems, pageAdminSharedItems, getSharedContentRevision } from "./sharedContent";
 const handle=vi.hoisted(()=>({db:null as any}));
 vi.mock("./db",()=>({getDb:async()=>handle.db}));
 import { getWorkingState, getPublishedSnapshot, saveWorkspace, publishWorkspace, createWorkingEntity, updateWorkingEntity, removeWorkingEntity, listTrash, restoreTrash, purgeTrash, listHistory, readVersion, restoreVersion, deleteVersion, reorderWorkingEntities } from "./managementWorkspace";
 
 // Real MySQL transaction/readback checks; every table referenced by the repository
 // is shadowed in this connection by a TEMPORARY table. Live tables are never edited.
-describe.skipIf(!process.env.DATABASE_URL)("management workspace real MySQL isolated persistence",()=>{
+describe.skipIf(!process.env.DATABASE_URL)("management workspace real MySQL isolated persistence", { timeout: 30000 }, ()=>{
   let connection:Connection;let ready=false;
   const originalTables=["site_settings","shared_templates","free_sites","creative_submissions","template_categories","creative_categories","site_content_versions"];
   const newTables=["management_workspaces","management_trash","management_backups"];
+  const sharedTables=["shared_content_items","shared_content_state"];
   const content={heroTitle:"النسخة العامة الأصلية",settings:{},buttons:[{id:"original-button",label:"الزر الأصلي",action:"gemini"}],pages:[{id:"page-1",slug:"isolated-native-test",title:"صفحة أصلية",status:"published",visible:true,renderMode:"code",customCode:{enabled:true,html:"<h1>PUBLIC ORIGINAL</h1>",css:"",js:""},blocks:[{id:"block-1",type:"text",title:"عنصر أصلي",text:"محتوى محفوظ"}],media:[{id:"file-1",name:"ملف مشترك",key:"unchanged-storage-key",url:"/api/page-media/file-1/view"}]}],services:[{id:"service-1",title:"الخدمة الأصلية"}],products:[]};
   beforeAll(async()=>{
     connection=await mysql.createConnection(process.env.DATABASE_URL!);
@@ -24,12 +26,14 @@ describe.skipIf(!process.env.DATABASE_URL)("management workspace real MySQL isol
       }
       const sql=fs.readFileSync(new URL("../drizzle/0011_orange_dragon_lord.sql",import.meta.url),"utf8");
       for(const name of newTables){const match=sql.match(new RegExp("CREATE TABLE `"+name+"`[\\s\\S]*?;"));if(!match)throw new Error("Temporary schema missing "+name);let ddl=match[0].replace("CREATE TABLE","CREATE TEMPORARY TABLE");if(name==="management_workspaces"&&!ddl.includes("`metadataJson`"))ddl=ddl.replace("(\n","(\n  `metadataJson` mediumtext NOT NULL,\n");await connection.query(ddl);}
+      const sharedSql=fs.readFileSync(new URL("../drizzle/0014_acoustic_mole_man.sql",import.meta.url),"utf8");
+      for(const name of sharedTables){const match=sharedSql.match(new RegExp("CREATE TABLE `"+name+"`[\\s\\S]*?;"));if(!match)throw new Error("Temporary schema missing "+name);await connection.query(match[0].replace("CREATE TABLE","CREATE TEMPORARY TABLE"));}
       handle.db=drizzle(connection);ready=true;
     } catch(error){await connection.end();throw error;}
   },30000);
   beforeEach(async()=>{
     if(!ready)throw new Error("Temporary table isolation was not initialized");
-    for(const name of [...newTables,...originalTables])await connection.query(`DELETE FROM \`${name}\``);
+    for(const name of [...sharedTables,...newTables,...originalTables])await connection.query(`DELETE FROM \`${name}\``);
     await connection.execute("INSERT INTO site_settings (id,contentJson) VALUES (1,?)",[JSON.stringify(content)]);
     await connection.execute("INSERT INTO creative_submissions (id,projectName,description,category,status,isVisible,sortOrder) VALUES (41,'وارد محفوظ','تعريف مشروع أصلي','design','pending',0,0)");
     await connection.execute("INSERT INTO shared_templates (id,tool,text,imageUrl,imageKey,imageName,mediaType,category,createdByOpenId) VALUES (7,'Gemini','تصميم أصلي','/manus-storage/original.png','original-key','original.png','image','weddings','owner')");
@@ -78,7 +82,7 @@ describe.skipIf(!process.env.DATABASE_URL)("management workspace real MySQL isol
     const first=await getWorkingState();const changed=JSON.parse(JSON.stringify(first.content));changed.buttons=[];changed.services=[];changed.pages[0].blocks=[];changed.pages[0].media=[];
     await saveWorkspace(changed);await removeWorkingEntity("templates",7);await removeWorkingEntity("freeSites",5);
     const entries=await listTrash();expect(entries.length).toBeGreaterThanOrEqual(6);expect(entries.some(item=>JSON.stringify(item.value).includes("unchanged-storage-key"))).toBe(true);
-    expect((await getPublishedSnapshot()).collections.templates).toHaveLength(1);
+    expect((await getPublishedSnapshot()).collections.templates).toHaveLength(0);
     for(const entry of entries)await restoreTrash(entry.id);
     const restored=await getWorkingState();expect((restored.content.buttons as any[])[0].id).toBe("original-button");expect((restored.content.pages as any[])[0].blocks[0].id).toBe("block-1");expect((restored.content.pages as any[])[0].media[0].key).toBe("unchanged-storage-key");expect(restored.collections.templates.some(row=>row.id===7)).toBe(true);
   });
@@ -98,4 +102,44 @@ describe.skipIf(!process.env.DATABASE_URL)("management workspace real MySQL isol
     const recovery=(await listHistory()).find(item=>item.type==="working-before-restore")!;expect((await readVersion(recovery.id))?.collections.templates).toHaveLength(before.collections.templates.length);
     await expect(deleteVersion(recovery.id,false)).rejects.toThrow();await deleteVersion(recovery.id,true);expect(await readVersion(recovery.id)).toBeNull();
   });
+  it("publishes independent saved content without changing structure revision or replacing it on publication", async () => {
+    const before = await getWorkingState(false);
+    const [[rowBefore]]: any = await connection.query("SELECT workingCollectionsJson,publishedCollectionsJson,revision FROM management_workspaces WHERE id=1");
+    const item = await createSharedItem("templates", { tool: "Gemini", text: "محتوى فوري", imageUrl: "/manus-storage/live.jpg", imageKey: "live-key", category: "weddings", mediaType: "image" });
+    expect((await pageSharedItems("templates", { tool: "Gemini" })).items.some((row: any) => row.id === item.id)).toBe(true);
+    const [[rowAfter]]: any = await connection.query("SELECT workingCollectionsJson,publishedCollectionsJson,revision FROM management_workspaces WHERE id=1");
+    expect(rowAfter).toEqual(rowBefore);
+    const saved = await saveWorkspace({ ...before.content, heroTitle: "هيكل مستقل" });
+    await updateSharedItem("templates", item.id, { text: "أحدث تعديل فوري" });
+    await publishWorkspace(saved.revision, true);
+    expect((await pageSharedItems("templates", { tool: "Gemini" })).items.find((row: any) => row.id === item.id).text).toBe("أحدث تعديل فوري");
+  });
+  it("returns bounded pages and full-text matches from one thousand isolated templates", async () => {
+    await getWorkingState();
+    const items = Array.from({ length: 1000 }, (_, index) => ({ kind: "templates", id: String(index + 100), text: "تصميم رقم " + index + (index === 977 ? " ".repeat(900) + "عبارة في آخر النص" : ""), category: "scale", status: "published" }));
+    for (let offset = 0; offset < items.length; offset += 100) {
+      const batch = items.slice(offset, offset + 100);
+      await connection.query("INSERT INTO shared_content_items (kind,entityId,tool,category,status,visibility,searchText,payloadJson) VALUES ?", [batch.map(item => ["templates", item.id, "Gemini", "scale", "published", 1, item.text.slice(0,512), JSON.stringify({ id: Number(item.id), tool:"Gemini", category:"scale", text:item.text, mediaType:"image", imageUrl:"/manus-storage/test.png" })])]);
+    }
+    const page = await pageSharedItems("templates", { tool: "Gemini", category: "scale", page: 1, pageSize: 12 });
+    const second = await pageSharedItems("templates", { tool: "Gemini", category: "scale", page: 2, pageSize: 12 });
+    expect(page.total).toBe(1000); expect(page.items).toHaveLength(12); expect(page.hasMore).toBe(true);
+    expect(second.items.map((row: any) => row.id).some((id: number) => page.items.some((row: any) => row.id === id))).toBe(false);
+    expect(JSON.stringify(page).length).toBeLessThan(20000);
+    const found = await pageSharedItems("templates", { tool:"Gemini", search:"عبارة في آخر النص" });
+    expect(found.total).toBe(1); expect(found.items[0].id).toBe(1077);
+  });
+  it("imports new guest arrivals once, updates the pending count and never revives a removed request", async () => {
+    await getWorkingState(); const stamp = await getSharedContentRevision();
+    await connection.execute("INSERT INTO creative_submissions (id,projectName,description,category,status,isVisible) VALUES (52,'ضيف جديد','تعريف مشروع جديد','design','pending',0)");
+    const changed = await getSharedContentRevision(); expect(changed.revision).toBeGreaterThan(stamp.revision);
+    const admin = await pageAdminSharedItems("submissions", { reviewState:"inbox", pageSize: 1 });
+    expect(admin.pendingCount).toBe(2); expect(admin.items).toHaveLength(1);
+    expect((await pageSharedItems("submissions")).items).toHaveLength(0);
+    await removeWorkingEntity("submissions", 52);
+    const afterDelete = await getSharedContentRevision(); const again = await getSharedContentRevision();
+    expect(again.revision).toBe(afterDelete.revision);
+    expect((await pageAdminSharedItems("submissions", { reviewState:"inbox" })).items.map((row:any) => row.id)).not.toContain(52);
+  });
+
 });

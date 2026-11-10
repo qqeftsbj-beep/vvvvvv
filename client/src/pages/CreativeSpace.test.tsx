@@ -3,11 +3,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import React, { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mutate = vi.fn();
+const { mutate, pageQuery } = vi.hoisted(() => ({ mutate: vi.fn(), pageQuery: vi.fn() }));
+const approved = { id: 1, projectName: "مشروع جميل", description: "وصف المشروع", category: "graphic-design", imageUrls: ["/one.jpg", "/two.jpg"], link: null, contact: null };
 vi.mock("@/lib/trpc", () => ({
-  trpc: { creativeSpace: { list: { useQuery: () => ({ data: [{ id: 1, projectName: "مشروع جميل", description: "وصف المشروع", category: "graphic-design", imageUrls: ["/one.jpg", "/two.jpg"], link: null, contact: null }], isLoading: false }) }, create: { useMutation: () => ({ mutate, isPending: false }) } }, creativeCategories: { list: { useQuery: () => ({ data: [{ id: 1, name: "الجرافيك والتصميم", slug: "graphic-design" }], isLoading: false }) } } },
+  trpc: { creativeSpace: { page: { useQuery: (input: unknown) => pageQuery(input) }, create: { useMutation: () => ({ mutate, isPending: false }) } }, creativeCategories: { list: { useQuery: () => ({ data: [{ id: 1, name: "الجرافيك والتصميم", slug: "graphic-design" }, { id: 2, name: "التصوير", slug: "photo" }] }) } } },
 }));
-vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "dark", toggleTheme: vi.fn() }) }));
+vi.mock("@/hooks/usePageTitle", () => ({ usePageTitle: (_path: string, fallback: string) => fallback }));
+vi.mock("@/contexts/OwnerPreviewContext", () => ({ useOwnerPreview: () => null }));
 vi.mock("sonner", () => { const toast = Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }); return { toast }; });
 vi.mock("wouter", () => ({ Link: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) => <a {...props}>{children}</a> }));
 
@@ -15,9 +17,14 @@ import CreativeSpace from "./CreativeSpace";
 
 describe("CreativeSpace public submissions", () => {
   afterEach(() => cleanup());
-  beforeEach(() => mutate.mockClear());
+  beforeEach(() => {
+    mutate.mockClear();
+    pageQuery.mockReset();
+    pageQuery.mockImplementation((input: { page: number; category?: string }) => ({ data: { items: input.page === 1 ? [{ ...approved, id: input.category ? 2 : 1, projectName: input.category ? "نتيجة القسم" : approved.projectName }] : [{ ...approved, id: 3, projectName: "صفحة أخرى" }], hasMore: input.page === 1, page: input.page }, isLoading: false, isFetching: false }));
+  });
   it("shows approved cards and requires both description and category", async () => {
     render(<CreativeSpace />);
+    expect(screen.getByRole("heading", { name: "مساحتك الإبداعية" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "مشروع جميل" })).toBeTruthy();
     expect(screen.queryByText("بيانات التواصل (اختياري)")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /أضف مشروعك/ }));
@@ -37,7 +44,7 @@ describe("CreativeSpace public submissions", () => {
     expect(screen.getAllByText("وصف يظهر فورًا")).toHaveLength(2);
   });
 
-  it("does not submit when the mandatory description or category is missing", () => {
+  it("does not submit when mandatory description or category is missing", () => {
     render(<CreativeSpace />);
     fireEvent.click(screen.getByRole("button", { name: /أضف مشروعك/ }));
     fireEvent.click(screen.getByRole("button", { name: /إرسال للمراجعة/ }));
@@ -50,8 +57,18 @@ describe("CreativeSpace public submissions", () => {
     expect(imageButtons).toHaveLength(2);
     fireEvent.click(imageButtons[0]);
     expect(screen.getByRole("dialog", { name: "عارض الصور" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "الصورة التالية" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "الصورة التالية" }));
     expect(screen.getByAltText("عرض مكبر").getAttribute("src")).toBe("/two.jpg");
+  });
+
+  it("loads only the requested page and resets pagination when selecting a category", () => {
+    render(<CreativeSpace />);
+    expect(screen.queryByRole("heading", { name: "صفحة أخرى" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "تحميل المزيد" }));
+    expect(pageQuery).toHaveBeenLastCalledWith({ page: 2, pageSize: 12 });
+    expect(screen.getByRole("heading", { name: "صفحة أخرى" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "التصوير" }));
+    expect(pageQuery).toHaveBeenLastCalledWith({ page: 1, pageSize: 12, category: "photo" });
+    expect(screen.queryByRole("heading", { name: "صفحة أخرى" })).toBeNull();
   });
 });

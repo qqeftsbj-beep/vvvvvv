@@ -30,7 +30,7 @@ function publishedCodePage(value: unknown): RecordValue | null {
   const code = pageCode || (page.useLegacyCustomCode !== false ? returnedCode : null);
   if (!code || code.enabled !== true) return null;
 
-  return { page, code };
+  return { page, code, sectionTitle: typeof value.sectionTitle === "string" ? value.sectionTitle : page.title };
 }
 
 export function createCustomPageRoute(loadPublishedPage: PublishedPageLookup = getPublishedPage) {
@@ -45,7 +45,7 @@ export function createCustomPageRoute(loadPublishedPage: PublishedPageLookup = g
       // fallback behavior for block pages and ordinary app routes.
       if (!published) return next();
 
-      const document = buildStandalonePageDocument(published.code as StandalonePageCode);
+      const document = buildStandalonePageDocument(published.code as StandalonePageCode, typeof published.sectionTitle === "string" ? published.sectionTitle : undefined);
       res
         .status(200)
         .set({

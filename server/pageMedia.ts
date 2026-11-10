@@ -222,8 +222,19 @@ function sanitizeHeaderFileName(originalName: string, extension: string): { fall
   return { fallback, encoded: encodeURIComponent(originalName) };
 }
 
-function mediaUrls(id: string): Pick<PageMedia, "url" | "downloadUrl"> {
-  return { url: `${PAGE_MEDIA_ROUTE_PREFIX}/${encodeURIComponent(id)}`, downloadUrl: `${PAGE_MEDIA_ROUTE_PREFIX}/${encodeURIComponent(id)}/download` };
+export function pageMediaPreviewUrl(id: string, mimeType: string): string | undefined {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) return undefined;
+  return `/api/media-preview/file/${encodeURIComponent(id)}?width=720`;
+}
+
+function mediaUrls(id: string, mimeType: string): Pick<PageMedia, "url" | "downloadUrl"> & Partial<Pick<PageMedia, "previewUrl">> {
+  const urls: Pick<PageMedia, "url" | "downloadUrl"> & Partial<Pick<PageMedia, "previewUrl">> = {
+    url: `${PAGE_MEDIA_ROUTE_PREFIX}/${encodeURIComponent(id)}`,
+    downloadUrl: `${PAGE_MEDIA_ROUTE_PREFIX}/${encodeURIComponent(id)}/download`,
+  };
+  const previewUrl = pageMediaPreviewUrl(id, mimeType);
+  if (previewUrl) urls.previewUrl = previewUrl;
+  return urls;
 }
 
 function toPageMedia(row: typeof pageMediaFiles.$inferSelect): PageMedia {
@@ -236,7 +247,7 @@ function toPageMedia(row: typeof pageMediaFiles.$inferSelect): PageMedia {
     description: row.description,
     mimeType: row.mimeType,
     size: row.size,
-    ...mediaUrls(row.id),
+    ...mediaUrls(row.id, row.mimeType),
     key: row.key,
     createdAt: row.createdAt.getTime(),
   };
@@ -386,7 +397,9 @@ function setContentHeaders(res: Response, row: typeof pageMediaFiles.$inferSelec
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Content-Type", row.mimeType);
   res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fallback}"; filename*=UTF-8''${encoded}`);
-  res.setHeader("Cache-Control", "public, max-age=60");
+  // The opaque media id refers to an immutable stored object. Replacements create a
+  // new id, so clients and CDNs can safely retain the exact bytes for a year.
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 }
 
 async function streamStoredMedia(req: Request, res: Response, row: typeof pageMediaFiles.$inferSelect, download: boolean): Promise<void> {

@@ -9,6 +9,7 @@ export type PageMedia = {
   size: number;
   url: string;
   downloadUrl: string;
+  previewUrl?: string;
   key: string;
   createdAt: number;
 };

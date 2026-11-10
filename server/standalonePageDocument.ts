@@ -118,19 +118,26 @@ function injectIntoDocument(markup: string, head: string, tail: string): string 
  * fragments are wrapped once). CSS/JS are inserted into the document without
  * adding the app's header, card, React root, or an iframe.
  */
-export function buildStandalonePageDocument(code: StandalonePageCode): string {
+export function buildStandalonePageDocument(code: StandalonePageCode, sectionTitle?: string): string {
   const html = text(code.html);
   const css = text(code.css);
   const js = text(code.js);
   const { head, tail } = additions({ css, js });
   const looksLikeDocument = /<!doctype\s+html\b|<html\b|<head\b|<body\b/i.test(html);
-
+  let document: string;
   if (!looksLikeDocument) {
     const safeMarkup = stripStoredDocumentControls(html);
-    return `<!doctype html><html lang="ar" dir="rtl"><head>${CHARSET}${VIEWPORT}${head}</head><body>${safeMarkup}${tail}</body></html>`;
+    document = `<!doctype html><html lang="ar" dir="rtl"><head>${CHARSET}${VIEWPORT}${head}</head><body>${safeMarkup}${tail}</body></html>`;
+  } else {
+    document = injectIntoDocument(html, head, tail);
   }
-
-  return injectIntoDocument(html, head, tail);
+  const title = sectionTitle?.trim();
+  if (!title) return document;
+  const escaped = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  if (!/<title\b/i.test(document)) document = document.replace(/<head\b[^>]*>/i, tag => `${tag}<title>${escaped} | أبو كيان الجنيد</title>`);
+  const heading = document.match(/<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/i)?.[1]?.replace(/<[^>]*>/g, "").trim();
+  if (heading === title || heading === escaped) return document;
+  return document.replace(/<body\b[^>]*>/i, tag => `${tag}<div data-section-heading dir="rtl" style="box-sizing:border-box;width:100%;padding:16px 20px;text-align:start;color:inherit;background:transparent"><h1 style="margin:0;font-family:inherit;font-weight:600;font-size:clamp(17px,3vw,23px);line-height:1.5;overflow-wrap:anywhere">${escaped}</h1></div>`);
 }
 
 // Descriptive aliases keep the small builder convenient for route and unit

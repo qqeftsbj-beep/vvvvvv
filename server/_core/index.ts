@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { pageMediaRouter } from "../pageMedia";
+import { imagePreviewRouter } from "../imagePreview";
 import { registerCustomPageRoutes } from "../customPageRoutes";
 import { appRouter } from "../routers";
 import { cleanupDeletedSharedTemplates, getTemplateRetentionDays } from "../db";
@@ -37,6 +38,7 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   app.use("/api/page-media", pageMediaRouter);
+  app.use("/api/media-preview", imagePreviewRouter);
   registerOAuthRoutes(app);
   // Must precede Vite/static SPA fallback so published code pages are real
   // documents while block pages and unknown pages retain normal SPA routing.

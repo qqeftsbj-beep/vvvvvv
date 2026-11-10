@@ -1,4 +1,4 @@
-import { bigint, index, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, index, int, mediumtext, mysqlEnum, mysqlTable, primaryKey, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /** Core user table backing auth flow. */
 export const users = mysqlTable("users", {
@@ -29,6 +29,42 @@ export const creativeSubmissions = mysqlTable("creative_submissions", {
 export const freeSites = mysqlTable("free_sites", { id: int("id").autoincrement().primaryKey(), name: varchar("name", { length: 255 }).notNull(), url: text("url"), description: text("description"), imageUrl: text("imageUrl"), imageKey: text("imageKey"), additionalText: text("additionalText"), sortOrder: int("sortOrder").default(0).notNull(), isVisible: int("isVisible").default(1).notNull(), createdByOpenId: varchar("createdByOpenId", { length: 64 }).notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull() });
 export const pageMediaFiles = mysqlTable("page_media_files", { id: varchar("id", { length: 36 }).primaryKey(), pageId: varchar("pageId", { length: 128 }).notNull(), name: varchar("name", { length: 255 }).notNull(), originalName: varchar("originalName", { length: 255 }).notNull(), folder: varchar("folder", { length: 160 }).default("").notNull(), description: text("description").notNull(), mimeType: varchar("mimeType", { length: 255 }).notNull(), size: int("size").notNull(), key: text("key").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull() });
 export const ownerEditorDrafts = mysqlTable("owner_editor_drafts", { id: int("id").primaryKey(), contentJson: mediumtext("contentJson").notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull() });
+
+/** Canonical immediately-shared records, independent of workspace save/publish snapshots. */
+export const sharedContentItems = mysqlTable("shared_content_items", {
+  kind: varchar("kind", { length: 32 }).notNull(),
+  entityId: varchar("entityId", { length: 128 }).notNull(),
+  tool: varchar("tool", { length: 32 }),
+  category: varchar("category", { length: 160 }),
+  status: varchar("status", { length: 32 }).default("published").notNull(),
+  reviewState: varchar("reviewState", { length: 32 }),
+  visibility: int("visibility").default(1).notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  deletedAt: timestamp("deletedAt"),
+  searchText: varchar("searchText", { length: 512 }).notNull(),
+  payloadJson: mediumtext("payloadJson").notNull(),
+}, table => ({
+  pk: primaryKey({ columns: [table.kind, table.entityId], name: "shared_content_items_pk" }),
+  kindPageIdx: index("shared_content_kind_page_idx").on(table.kind, table.visibility, table.status, table.reviewState, table.sortOrder, table.createdAt),
+  categoryPageIdx: index("shared_content_category_page_idx").on(table.kind, table.category, table.visibility, table.sortOrder, table.createdAt),
+  toolPageIdx: index("shared_content_tool_page_idx").on(table.kind, table.tool, table.category, table.visibility, table.sortOrder, table.createdAt),
+  deletedIdx: index("shared_content_deleted_idx").on(table.kind, table.deletedAt, table.updatedAt),
+  searchIdx: index("shared_content_search_idx").on(table.kind, table.searchText),
+}));
+export const sharedContentState = mysqlTable("shared_content_state", {
+  id: int("id").primaryKey(),
+  revision: int("revision").default(1).notNull(),
+  seeded: int("seeded").default(0).notNull(),
+  nextIdsJson: mediumtext("nextIdsJson").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export const imagePreviewCache = mysqlTable("image_preview_cache", {
+  cacheKey: varchar("cacheKey", { length: 96 }).primaryKey(),
+  storageKey: text("storageKey").notNull(),
+  createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+});
 
 /** Singleton durable workspace. Legacy rows are never updated or deleted by this layer. */
 export const managementWorkspaces = mysqlTable("management_workspaces", {

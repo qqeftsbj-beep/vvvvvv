@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectPageMediaMetadata, PageMediaValidationError, validatePageMediaFile } from "./pageMedia";
+import { collectPageMediaMetadata, PageMediaValidationError, pageMediaPreviewUrl, validatePageMediaFile } from "./pageMedia";
 
 function encoded(bytes: number[]): string {
   return Buffer.from(bytes).toString("base64");
@@ -53,5 +53,13 @@ describe("collectPageMediaMetadata", () => {
       { id: "page-a", media: [{ id: "00000000-0000-0000-0000-000000000002", name: "A" }] },
       { id: "page-b", draft: { media: [{ id: "00000000-0000-0000-0000-000000000002", name: "B" }] } },
     ])).toThrow(/multiple pages/i);
+  });
+});
+
+describe("pageMediaPreviewUrl", () => {
+  it("returns a stable default preview URL only for supported static image types", () => {
+    expect(pageMediaPreviewUrl("00000000-0000-0000-0000-000000000001", "image/png")).toBe("/api/media-preview/file/00000000-0000-0000-0000-000000000001?width=720");
+    expect(pageMediaPreviewUrl("00000000-0000-0000-0000-000000000001", "image/gif")).toBeUndefined();
+    expect(pageMediaPreviewUrl("00000000-0000-0000-0000-000000000001", "application/pdf")).toBeUndefined();
   });
 });

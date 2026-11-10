@@ -72,6 +72,23 @@ describe("buildStandalonePageDocument", () => {
     expect(document).toContain("<\\/script>");
     expect(document.match(/<script data-page-code-user>/g)).toHaveLength(1);
   });
+  it("shows the linked section heading without wrapping the page in an iframe", () => {
+    const document = buildStandalonePageDocument({ html: '<main>Custom content</main>' }, 'خدمات التعليم');
+    expect(document).toContain('data-section-heading');
+    expect(document).toContain('خدمات التعليم');
+    expect(document).toContain('<main>Custom content</main>');
+    expect(document).not.toContain('<iframe');
+  });
+  it("does not duplicate an authored matching section heading", () => {
+    const document = buildStandalonePageDocument({ html: '<h1>المواقع المجانية</h1>' }, 'المواقع المجانية');
+    expect(document).not.toContain('data-section-heading');
+    expect(document.match(/<h1/g)).toHaveLength(1);
+  });
+  it("escapes a section label rather than executing HTML from a button name", () => {
+    const document = buildStandalonePageDocument({ html: '<p>Safe content</p>' }, '<script>alert(1)</script>');
+    expect(document).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(document).not.toContain('<script>alert(1)</script>');
+  });
 });
 
 describe("STANDALONE_PAGE_CSP", () => {

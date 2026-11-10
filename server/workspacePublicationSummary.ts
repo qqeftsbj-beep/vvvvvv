@@ -19,7 +19,7 @@ function compare(kind: string, label: string, before: any[], after: any[]): Chan
 /** Both inputs must already be materialized as approved public snapshots. */
 export function buildPublicationChanges(before: Snapshot, after: Snapshot): Change[] {
   const result: Change[] = [];
-  for (const [kind, label] of Object.entries({ templates: "التصاميم والقوالب", freeSites: "المواقع المجانية", submissions: "المشاركات المعتمدة", templateCategories: "أقسام التصاميم", creativeCategories: "أقسام الإبداع" })) result.push(compare(kind, label, before.collections[kind] || [], after.collections[kind] || []));
+  // Shared sections save independently and must never appear in the administrative publication review.
   for (const [kind, label] of Object.entries({ pages: "الصفحات المعتمدة", buttons: "الأزرار", services: "الخدمات", products: "المنتجات" })) result.push(compare(kind, label, before.content[kind] || [], after.content[kind] || []));
   const arrays = new Set(["pages", "buttons", "services", "products"]);
   const fields = new Set([...Object.keys(before.content), ...Object.keys(after.content)]);

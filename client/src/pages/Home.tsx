@@ -1,3 +1,4 @@
+import OptimizedImage from "@/components/OptimizedImage";
 /*
   Design reminder — Editorial Desert Studio:
   Arabic RTL art-direction, deep Junaidi indigo, warm sand paper, antique gold accents,
@@ -33,6 +34,7 @@ import { Link, useLocation } from "wouter";
 import { EditableButton, SiteContent, loadSiteContent, normalizeSiteContent, saveSiteContent } from "@/lib/siteContent";
 import { buttonDestination } from "@/lib/buttonRouting";
 import "./managedButtons.css";
+import { mediaPreviewSrc, mediaPreviewSrcSet } from "@/lib/mediaPreview";
 import { useTheme } from "@/contexts/ThemeContext";
 import ChatAssistant from "@/components/ChatAssistant";
 import { trpc } from "@/lib/trpc";
@@ -123,8 +125,8 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [, routeNavigate] = useLocation();
   const navigate=preview?.navigate || routeNavigate;
-  const geminiTemplates = trpc.templates.list.useQuery({ tool: "Gemini" }, { staleTime: 30_000 });
-  const chatTemplates = trpc.templates.list.useQuery({ tool: "Chat GBT" }, { staleTime: 30_000 });
+  const geminiTemplates = trpc.templates.page.useQuery({ tool: "Gemini", page: 1, pageSize: 12, search: searchTerm.trim() || undefined }, { enabled: searchOpen && searchTerm.trim().length >= 2, staleTime: 30_000 });
+  const chatTemplates = trpc.templates.page.useQuery({ tool: "Chat GBT", page: 1, pageSize: 12, search: searchTerm.trim() || undefined }, { enabled: searchOpen && searchTerm.trim().length >= 2, staleTime: 30_000 });
   const remoteContent = trpc.siteContent.get.useQuery(undefined, { staleTime: 0, refetchInterval: 5_000, refetchOnWindowFocus: true });
 
   useEffect(() => {
@@ -191,7 +193,7 @@ export default function Home() {
     portfolio.forEach((item) => {
       if (`${item.title} ${item.text} ${item.eyebrow}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `work-${item.title}`, title: item.title, detail: item.text, kind: "عمل", action: () => { setSearchOpen(false); handleNav("work"); } });
     });
-    (preview?.collections.templates || [...(geminiTemplates.data || []), ...(chatTemplates.data || [])]).forEach((template) => {
+    (preview?.collections.templates || [...(geminiTemplates.data?.items || []), ...(chatTemplates.data?.items || [])]).forEach((template) => {
       if (`${template.text} ${template.imageName} ${template.tool}`.toLocaleLowerCase("ar").includes(term)) results.push({ id: `template-${template.id}`, title: template.imageName || "قالب تصميم", detail: template.text, kind: template.tool, action: () => { setSearchOpen(false); navigate(template.tool === "Gemini" ? "/templates/gemini" : "/templates/chat-gbt"); } });
     });
     return results.slice(0, 12);
@@ -265,7 +267,7 @@ export default function Home() {
             <span className="brand-mark-wrap">
               <BrandSeal className="brand-mark" />
             </span>
-            <span className="brand-avatar"><img src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" alt="صورة أبو كيان الجنيد الشخصية" /></span>
+            <span className="brand-avatar"><OptimizedImage src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" previewWidth={360} decoding="async" alt="صورة أبو كيان الجنيد الشخصية" /></span>
             <span className="brand-copy">
               <strong>أبو كيان الجنيد</strong>
               <span>استوديو إبداعي · اليمن</span>
@@ -432,7 +434,7 @@ export default function Home() {
                 onClick={() => handlePlaceholder(`خدمة ${service.title}`)}
               >
                 <span className="service-card-media">
-                  {serviceImage ? <img src={serviceImage} alt={`صورة ${service.title}`} loading="lazy" /> : <Icon size={34} strokeWidth={1.4} />}
+                  {serviceImage ? <OptimizedImage src={serviceImage} alt={`صورة ${service.title}`} loading="lazy" /> : <Icon size={34} strokeWidth={1.4} />}
                   <span className="service-card-number">{service.number}</span>
                 </span>
                 <span className="service-card-body">
@@ -455,7 +457,7 @@ export default function Home() {
         {customButtons("services").length > 0 && <div className="custom-section-actions">{customButtons("services").map((button) => <button key={button.id} type="button" className="custom-site-button" style={customButtonStyle(button)} onClick={() => handleCustomButton(button)}>{buttonIcon(button)} {button.label}<ArrowLeft size={14} /></button>)}</div>}
       </section>
 
-      {content.products.length > 0 && <section id="products" className="section products-section" data-reveal><span className="section-ghost" aria-hidden="true">04</span><div className="section-intro"><span className="section-index">/ 04</span><div><div className="eyebrow">منتجات وخدمات جاهزة</div><h2>أشياء صُممت<br /><em>لتُطلب الآن.</em></h2></div><p>أضف منتجاتك أو باقاتك من لوحة التحكم، واجعلها ظاهرة في واجهة الموقع بشكل واضح.</p></div><div className="product-grid">{content.products.map((product) => <article className="product-card" key={product.id}>{product.image && <img src={product.image} alt={product.title?.trim() || "منتج من أبو كيان الجنيد"} loading="lazy" />}<div><h3>{product.title}</h3><p>{product.description}</p><strong>{product.price}</strong></div></article>)}</div></section>}
+      {content.products.length > 0 && <section id="products" className="section products-section" data-reveal><span className="section-ghost" aria-hidden="true">04</span><div className="section-intro"><span className="section-index">/ 04</span><div><div className="eyebrow">منتجات وخدمات جاهزة</div><h2>أشياء صُممت<br /><em>لتُطلب الآن.</em></h2></div><p>أضف منتجاتك أو باقاتك من لوحة التحكم، واجعلها ظاهرة في واجهة الموقع بشكل واضح.</p></div><div className="product-grid">{content.products.map((product) => <article className="product-card" key={product.id}>{product.image && <OptimizedImage src={mediaPreviewSrc(product.image)} srcSet={mediaPreviewSrcSet(product.image)} sizes="(max-width: 680px) 90vw, 480px" decoding="async" alt={product.title?.trim() || "منتج من أبو كيان الجنيد"} loading="lazy" />}<div><h3>{product.title}</h3><p>{product.description}</p><strong>{product.price}</strong></div></article>)}</div></section>}
 
       <section id="work" className="section work-section" data-reveal>
         <span className="section-ghost" aria-hidden="true">03</span>
@@ -482,7 +484,7 @@ export default function Home() {
               onClick={() => handlePlaceholder(item.title)}
             >
               <div className="portfolio-image-wrap">
-                <img src={item.image} alt={item.title} className="portfolio-image" />
+                <OptimizedImage src={item.image} sizes="(max-width: 680px) 90vw, 480px" decoding="async" alt={item.title} className="portfolio-image" />
                 <span className="portfolio-hover">شاهد التفاصيل <ArrowLeft size={15} /></span>
               </div>
               <div className="portfolio-meta">
@@ -538,7 +540,7 @@ export default function Home() {
 
       <section className="about-strip" aria-label="عن الاستوديو" data-reveal>
         <div className="about-image-wrap">
-          <img src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" alt="هوية أبو كيان الجنيد البصرية" className="about-image" />
+          <OptimizedImage src="/manus-storage/abu-kayan-profile_85a5e4ec.jpg" previewWidth={360} decoding="async" alt="هوية أبو كيان الجنيد البصرية" className="about-image" />
           <span>رائد الجنيد / 2026</span>
         </div>
         <div className="about-copy">

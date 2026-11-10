@@ -40,6 +40,7 @@ function json(value: unknown) {
 }
 function numberDate(value: unknown): number { return value instanceof Date ? value.getTime() : typeof value === "number" ? value : new Date(String(value || 0)).getTime(); }
 function reviveDates(value: any): any {
+  if (value instanceof Date) return value;
   if (Array.isArray(value)) return value.map(reviveDates);
   if (!value || typeof value !== "object") return value;
   const next: Record<string, unknown> = {};
@@ -213,13 +214,22 @@ function sanitizePublishedContent(content: Record<string, unknown>) {
   }
   return next;
 }
-export async function getWorkingState(): Promise<WorkspaceState> {
-  await ensureWorkspace();
-  return transaction(async tx => { const row = await mergeGuestArrivals(tx, await selectOne(tx, true)); return stateFrom(row, await trashRows(tx)); });
+async function currentSharedCollections(publicOnly: boolean): Promise<WorkspaceCollections> {
+  const { listSharedItems } = await import("./sharedContent");
+  const rows = await Promise.all(COLLECTION_KEYS.map(kind => listSharedItems(kind, publicOnly)));
+  return Object.fromEntries(COLLECTION_KEYS.map((kind,index) => [kind,rows[index]])) as WorkspaceCollections;
 }
-export async function getPublishedSnapshot(): Promise<WorkspaceSnapshot> {
+export async function getWorkingState(includeSharedCollections = true): Promise<WorkspaceState> {
+  await ensureWorkspace();
+  const state = await transaction(async tx => { const row = await selectOne(tx, true); return stateFrom(row, await trashRows(tx)); });
+  state.collections = includeSharedCollections ? await currentSharedCollections(false) : emptyCollections();
+  return state;
+}
+export async function getPublishedSnapshot(includeSharedCollections = true): Promise<WorkspaceSnapshot> {
   const row = await ensureWorkspace();
-  return materializePublishedSnapshot(publishedFromRow(row));
+  const snapshot = materializePublishedSnapshot(publishedFromRow(row));
+  snapshot.collections = includeSharedCollections ? await currentSharedCollections(true) : emptyCollections();
+  return snapshot;
 }
 export function materializePublishedSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
   const next = clone(snapshot);
@@ -228,17 +238,18 @@ export function materializePublishedSnapshot(snapshot: WorkspaceSnapshot): Works
   next.collections.submissions = next.collections.submissions.filter((item: any) => item.status === "approved" && Number(item.isVisible) === 1 && item.reviewState === "saved");
   return next;
 }
-export async function getWorkingSnapshot(): Promise<WorkspaceSnapshot> { const state = await getWorkingState(); return { content: state.content, collections: state.collections }; }
+export async function getWorkingSnapshot(includeSharedCollections = true): Promise<WorkspaceSnapshot> { const state = await getWorkingState(includeSharedCollections); return { content: state.content, collections: state.collections }; }
 export async function getPublishedPage(slug: string) {
-  const snapshot = await getPublishedSnapshot();
+  const snapshot = await getPublishedSnapshot(false);
   const page = Array.isArray(snapshot.content.pages) ? snapshot.content.pages.find((item: any) => item?.slug === slug && item.visible !== false && item.status !== "draft") : null;
-  return page ? { page, settings: snapshot.content.settings, customCode: snapshot.content.customCode } : null;
+  const button = Array.isArray(snapshot.content.buttons) ? snapshot.content.buttons.filter((item:any)=>item.visible!==false).sort((a:any,b:any)=>Number(a.order||0)-Number(b.order||0)).find((item:any)=>["custom-page","internal"].includes(item.action)&&item.url?.split(/[?#]/)[0]===`/custom/${slug}`) : null;
+  return page ? { page, settings: snapshot.content.settings, customCode: snapshot.content.customCode, sectionTitle: button?.label?.trim() || page.title } : null;
 }
 
 export async function saveWorkspace(content: Record<string, unknown>): Promise<WorkspaceState> {
   await ensureWorkspace();
   return transaction(async tx => {
-    const row = await mergeGuestArrivals(tx, await selectOne(tx, true));
+    const row = await selectOne(tx, true);
     if (!row) throw new Error("Workspace is not initialized");
     const before = snapshotFromRow(row);
     const after: WorkspaceSnapshot = { content: clone(record(content)), collections: clone(before.collections) };
@@ -259,15 +270,17 @@ export async function publishWorkspace(revision: number, confirm: boolean) {
   return transaction(async tx => {
     let row = await selectOne(tx, true);
     if (!row) { await ensureWorkspace(); row = await selectOne(tx, true); }
-    row = await mergeGuestArrivals(tx, row);
+    // Shared guest/content events never change the administrative publication revision.
     if (Number(row.revision) !== revision) throw new Error("Workspace revision is stale; reload before publishing.");
     const oldSnapshot = publishedFromRow(row);
+    const { sharedSnapshotInTransaction } = await import("./sharedContent");
+    const currentPublicCollections = await sharedSnapshotInTransaction(tx, true);
     const backupJson = json(oldSnapshot.content);
-    const backupCollections = json(oldSnapshot.collections);
+    const backupCollections = json(currentPublicCollections);
     const backup = await tx.insert(managementBackups).values({ name: `قبل النشر #${row.publishedRevision}`, type: "published", size: Buffer.byteLength(backupJson + backupCollections, "utf8"), contentJson: backupJson, collectionsJson: backupCollections });
     const workingContent = sanitizePublishedContent(record(parse(row.workingContentJson)));
-    const workingCollections = orderedCollections({ ...emptyCollections(), ...record(parse(row.workingCollectionsJson)) });
-    workingCollections.submissions = workingCollections.submissions.filter((item: any) => item.reviewState === "saved" && item.status === "approved" && Number(item.isVisible) === 1);
+    // Collection snapshots are legacy backup data only. Publication changes structure, never shared items.
+    const workingCollections = oldSnapshot.collections;
     const nextPublished = { content: json(workingContent), collections: json(workingCollections) };
     await tx.update(managementWorkspaces).set({ publishedContentJson: nextPublished.content, publishedCollectionsJson: nextPublished.collections, publishedRevision: row.revision }).where(eq(managementWorkspaces.id, WORKSPACE_ID));
     const confirmed = await selectOne(tx, true);
@@ -301,6 +314,12 @@ function restoreAt(snapshot: WorkspaceSnapshot, entry: TrashEntry) {
   list.splice(index, 0, clone(entry.value));
 }
 export async function restoreTrash(id: string) {
+  const entries = await listTrash();
+  const target = entries.find(entry => entry.id === id);
+  if (target && (target.source === "shared_templates" || /^collections\.(templates|freeSites|submissions|templateCategories|creativeCategories)$/.test(target.source))) {
+    const { restoreSharedTrash } = await import("./sharedContent");
+    return restoreSharedTrash(id);
+  }
   return transaction(async tx => {
     const row = await selectOne(tx, true); const entries = await tx.select().from(managementTrash).where(eq(managementTrash.id, id)).limit(1);
     if (!row || !entries[0]) throw new Error("Trash entry not found.");
@@ -315,7 +334,7 @@ export async function restoreTrash(id: string) {
 export async function purgeTrash(id: string, confirm: boolean) { if (!confirm) throw new Error("Permanent deletion requires explicit confirmation."); const db: any = await getDb(); if (!db) throw new Error("Database unavailable"); await db.delete(managementTrash).where(eq(managementTrash.id, id)); return { success: true as const }; }
 
 export async function backupWorkspace(name = `نسخة عمل ${new Date().toISOString()}`) {
-  return transaction(async tx => { const row = await selectOne(tx, true); if (!row) throw new Error("Workspace not initialized"); const contentJson = row.workingContentJson; const collectionsJson = row.workingCollectionsJson; const result = await tx.insert(managementBackups).values({ name, type: "working", size: Buffer.byteLength(contentJson + collectionsJson, "utf8"), contentJson, collectionsJson }); return { success: true as const, id: Number(result[0]?.insertId || 0), createdAt: Date.now(), size: Buffer.byteLength(contentJson + collectionsJson, "utf8"), type: "working" }; });
+  return transaction(async tx => { const row = await selectOne(tx, true); if (!row) throw new Error("Workspace not initialized"); const contentJson = row.workingContentJson; const { sharedSnapshotInTransaction } = await import("./sharedContent"); const collectionsJson = json(await sharedSnapshotInTransaction(tx)); const result = await tx.insert(managementBackups).values({ name, type: "working", size: Buffer.byteLength(contentJson + collectionsJson, "utf8"), contentJson, collectionsJson }); return { success: true as const, id: Number(result[0]?.insertId || 0), createdAt: Date.now(), size: Buffer.byteLength(contentJson + collectionsJson, "utf8"), type: "working" }; });
 }
 export async function listHistory(): Promise<HistoryEntry[]> {
   const db: any = await getDb(); if (!db) throw new Error("Database unavailable");
@@ -332,80 +351,17 @@ export async function readVersion(id: string | number): Promise<WorkspaceSnapsho
 }
 export async function restoreVersion(id: string | number) {
   const snapshot = await readVersion(id); if (!snapshot) throw new Error("Version not found.");
-  return transaction(async tx => { const row = await selectOne(tx, true); if (!row) throw new Error("Workspace not initialized"); await tx.insert(managementBackups).values({ name: `استرداد تلقائي قبل ${new Date().toISOString()}`, type: "working-before-restore", size: Buffer.byteLength(row.workingContentJson + row.workingCollectionsJson, "utf8"), contentJson: row.workingContentJson, collectionsJson: row.workingCollectionsJson }); const revision = Number(row.revision) + 1; const collections = String(id).startsWith("legacy:") ? snapshotFromRow(row).collections : snapshot.collections; await tx.update(managementWorkspaces).set({ workingContentJson: json(snapshot.content), workingCollectionsJson: json(collections), revision, savedAt: new Date() }).where(eq(managementWorkspaces.id, WORKSPACE_ID)); const confirmed = await selectOne(tx, true); return stateFrom(confirmed, await trashRows(tx)); });
+  return transaction(async tx => { const row = await selectOne(tx, true); if (!row) throw new Error("Workspace not initialized"); await tx.insert(managementBackups).values({ name: `استرداد تلقائي قبل ${new Date().toISOString()}`, type: "working-before-restore", size: Buffer.byteLength(row.workingContentJson + row.workingCollectionsJson, "utf8"), contentJson: row.workingContentJson, collectionsJson: row.workingCollectionsJson }); const revision = Number(row.revision) + 1; const collections = snapshotFromRow(row).collections; await tx.update(managementWorkspaces).set({ workingContentJson: json(snapshot.content), workingCollectionsJson: json(collections), revision, savedAt: new Date() }).where(eq(managementWorkspaces.id, WORKSPACE_ID)); const confirmed = await selectOne(tx, true); return { ...stateFrom(confirmed, await trashRows(tx)), collections: await (await import("./sharedContent")).sharedSnapshotInTransaction(tx) }; });
 }
 export async function deleteVersion(id: string | number, confirm: boolean) { if (!confirm) throw new Error("Backup deletion requires explicit confirmation."); const db: any = await getDb(); if (!db) throw new Error("Database unavailable"); const raw = String(id); if (raw.startsWith("legacy:")) await db.delete(siteContentVersions).where(eq(siteContentVersions.id, Number(raw.slice(7)))); else await db.delete(managementBackups).where(eq(managementBackups.id, Number(raw.replace("workspace:", "")))); return { success: true as const }; }
 
 export async function savePrivateSiteContent(content: Record<string, unknown>) { return saveWorkspace(await normalizeAndUploadSiteContent(content)); }
-export async function listPublishedCollection(kind: keyof WorkspaceCollections) { const snapshot = await getPublishedSnapshot(); return snapshot.collections[kind].map(apiRow); }
-export async function listWorkingCollection(kind: keyof WorkspaceCollections) { const snapshot = await getWorkingSnapshot(); return snapshot.collections[kind].map(apiRow); }
-
-function nextNumericId(items: any[]) {
-  return items.reduce((max, item) => Math.max(max, typeof item?.id === "number" ? item.id : 0), 0) + 1;
-}
-export async function createWorkingEntity(kind: keyof WorkspaceCollections, value: Record<string, unknown>) {
-  return transaction(async tx => {
-    const row = await mergeGuestArrivals(tx, await selectOne(tx, true));
-    if (!row) throw new Error("Workspace is not initialized");
-    const snapshot = snapshotFromRow(row); const metadata = metadataFromRow(row); const nextId = Number(metadata.nextIds[kind] || nextNumericId(snapshot.collections[kind])); const item = { ...clone(value), id: value.id ?? nextId, createdAt: value.createdAt ?? new Date(), updatedAt: value.updatedAt ?? new Date() };
-    metadata.nextIds[kind] = Math.max(nextId + 1, Number(item.id) + 1);
-    snapshot.collections[kind].push(item); const revision = Number(row.revision) + 1;
-    await tx.update(managementWorkspaces).set({ workingCollectionsJson: json(snapshot.collections), metadataJson: json(metadata), revision, savedAt: new Date() }).where(eq(managementWorkspaces.id, WORKSPACE_ID));
-    return apiRow(item);
-  });
-}
-export async function updateWorkingEntity(kind: keyof WorkspaceCollections, id: number, patch: Record<string, unknown>) {
-  return transaction(async tx => {
-    const row = await mergeGuestArrivals(tx, await selectOne(tx, true));
-    if (!row) throw new Error("Workspace is not initialized");
-    const snapshot = snapshotFromRow(row); const index = snapshot.collections[kind].findIndex((item: any) => Number(item.id) === id);
-    if (index < 0) throw new Error("Workspace item not found.");
-    const previous = snapshot.collections[kind][index];
-    if ((kind === "templateCategories" || kind === "creativeCategories") && typeof patch.slug === "string" && patch.slug !== previous.slug) {
-      const contentKind = kind === "templateCategories" ? "templates" : "submissions";
-      snapshot.collections[contentKind] = snapshot.collections[contentKind].map((item:any) => item.category === previous.slug && (kind !== "templateCategories" || item.tool === previous.tool) ? {...item,category:patch.slug} : item);
-    }
-    snapshot.collections[kind][index] = { ...snapshot.collections[kind][index], ...clone(patch), id, updatedAt: new Date() }; const revision = Number(row.revision) + 1;
-    await tx.update(managementWorkspaces).set({ workingCollectionsJson: json(snapshot.collections), revision, savedAt: new Date() }).where(eq(managementWorkspaces.id, WORKSPACE_ID));
-    return apiRow(snapshot.collections[kind][index]);
-  });
-}
-export async function removeWorkingEntity(kind: keyof WorkspaceCollections, id: number) {
-  return transaction(async tx => {
-    const row = await mergeGuestArrivals(tx, await selectOne(tx, true));
-    if (!row) throw new Error("Workspace is not initialized");
-    const snapshot = snapshotFromRow(row); const index = snapshot.collections[kind].findIndex((item: any) => Number(item.id) === id);
-    if (index < 0) return { success: true as const };
-    const [removed] = snapshot.collections[kind].splice(index, 1); const revision = Number(row.revision) + 1; const trashId = `trash:${revision}:${crypto.randomUUID()}`;
-    await tx.insert(managementTrash).values({ id: trashId, kind: kind.slice(0, -1), title: titleOf(removed, kind), source: `collections.${kind}`, valueJson: json(removed), itemIndex: index, workspaceRevision: revision });
-    await tx.update(managementWorkspaces).set({ workingCollectionsJson: json(snapshot.collections), revision, savedAt: new Date() }).where(eq(managementWorkspaces.id, WORKSPACE_ID));
-    return { success: true as const };
-  });
-}
-
-/** Save a complete ordering in one transaction; no partial ordering on failures. */
-export async function reorderWorkingEntities(kind: keyof WorkspaceCollections, ids: number[], tool?: string) {
-  await ensureWorkspace();
-  return transaction(async tx => {
-    const row = await mergeGuestArrivals(tx, await selectOne(tx, true));
-    const snapshot = snapshotFromRow(row);
-    if (new Set(ids).size !== ids.length) throw new Error("Duplicate ordering identifiers.");
-    for (const id of ids) {
-      const item = snapshot.collections[kind].find((candidate:any)=>Number(candidate.id)===id);
-      if (!item || (tool && item.tool!==tool)) throw new Error("Ordering contains an unavailable item or another design library.");
-    }
-    snapshot.collections[kind] = snapshot.collections[kind].map((item:any)=>{
-      const index=ids.indexOf(Number(item.id));
-      return index<0?item:{...item,sortOrder:index+(kind.endsWith("Categories")?1:0)};
-    });
-    const serialized = json(snapshot.collections); const revision = Number(row.revision)+1;
-    await tx.update(managementWorkspaces).set({workingCollectionsJson:serialized,revision,savedAt:new Date()}).where(eq(managementWorkspaces.id,WORKSPACE_ID));
-    const confirmed=await selectOne(tx,true);
-    if (!confirmed || confirmed.workingCollectionsJson!==serialized) throw new Error("Ordering confirmation failed.");
-    const rows=orderedCollections(snapshot.collections)[kind].map(apiRow);
-    return tool?rows.filter((item:any)=>item.tool===tool):rows;
-  });
-}
+export async function listPublishedCollection(kind: keyof WorkspaceCollections) { const { listSharedItems } = await import("./sharedContent"); return listSharedItems(kind, true); }
+export async function listWorkingCollection(kind: keyof WorkspaceCollections) { const { listSharedItems } = await import("./sharedContent"); return listSharedItems(kind, false); }
+export async function createWorkingEntity(kind: keyof WorkspaceCollections, value: Record<string, unknown>) { const { createSharedItem } = await import("./sharedContent"); return createSharedItem(kind, value); }
+export async function updateWorkingEntity(kind: keyof WorkspaceCollections, id: number, patch: Record<string, unknown>) { const { updateSharedItem } = await import("./sharedContent"); return updateSharedItem(kind, id, patch); }
+export async function removeWorkingEntity(kind: keyof WorkspaceCollections, id: number) { const { removeSharedItem } = await import("./sharedContent"); return removeSharedItem(kind, id); }
+export async function reorderWorkingEntities(kind: keyof WorkspaceCollections, ids: number[], tool?: string) { const { reorderSharedItems } = await import("./sharedContent"); return reorderSharedItems(kind, ids, tool); }
 /** Deterministic in-memory repository used by unit tests; it follows the same optimistic rules. */
 export function createMemoryWorkspace(seed: Partial<WorkspaceSnapshot> = {}) {
   let working: WorkspaceSnapshot = { content: clone(seed.content || {}), collections: { ...emptyCollections(), ...(seed.collections || {}) } };

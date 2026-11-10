@@ -3,6 +3,8 @@
   Keep the public experience Arabic-first, warm, asymmetric, and editorial with Junaidi indigo accents.
 */
 
+import React, { lazy, Suspense } from "react";
+import { useSharedContentSync } from "@/hooks/useSharedContentSync";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -10,17 +12,18 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
-import TemplateStudio from "./pages/TemplateStudio";
-import OwnerPanel from "./pages/OwnerPanel";
-import OwnerPreview from "./pages/OwnerPreview";
-import OwnerInbox from "./pages/OwnerInbox";
-import FreeSites from "./pages/FreeSites";
-import CreativeSpace from "./pages/CreativeSpace";
-import CustomPage from "./pages/CustomPage";
+const TemplateStudio = lazy(() => import("./pages/TemplateStudio"));
+const OwnerPanel = lazy(() => import("./pages/OwnerPanel"));
+const OwnerPreview = lazy(() => import("./pages/OwnerPreview"));
+const OwnerInbox = lazy(() => import("./pages/OwnerInbox"));
+const FreeSites = lazy(() => import("./pages/FreeSites"));
+const CreativeSpace = lazy(() => import("./pages/CreativeSpace"));
+const CustomPage = lazy(() => import("./pages/CustomPage"));
 function Router() {
+  useSharedContentSync();
   // make sure to consider if you need authentication for certain routes
   return (
-    <Switch>
+    <Suspense fallback={<div dir="rtl" className="container py-12" role="status">جارٍ فتح الصفحة…</div>}><Switch>
       <Route path="/" component={Home} />
       <Route path="/owner" component={OwnerPanel} />
       <Route path="/owner/preview" component={OwnerPreview} />
@@ -36,7 +39,7 @@ function Router() {
       </Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
-    </Switch>
+    </Switch></Suspense>
   );
 }
 
