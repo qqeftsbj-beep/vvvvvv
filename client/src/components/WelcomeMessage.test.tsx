@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WelcomeMessage from "./WelcomeMessage";
+
+vi.mock("@/lib/trpc", async () => {
+  const { defaultWelcomeConfig } = await import("@shared/welcomeSchedule");
+  return { trpc: { welcome: { active: { useQuery: () => ({ data: { template: defaultWelcomeConfig.templates[0] } }) } } } };
+});
 
 const WELCOME_SESSION_KEY = "abu-kayan-welcome-seen-session-v1";
 const OTHER_SESSION_KEY = "welcome-message-test-unrelated";
@@ -76,7 +81,7 @@ describe("WelcomeMessage", () => {
     await waitFor(expectWelcomeVisible);
   });
 
-  it("dismisses from X, backdrop, and Escape without recording the session", async () => {
+  it("dismisses from X, backdrop, and Escape while preserving the session marker", async () => {
     const view = render(<WelcomeMessage pathname="/" />);
     await waitFor(expectWelcomeVisible);
     fireEvent.click(screen.getByRole("button", { name: closeName }));
@@ -101,7 +106,7 @@ describe("WelcomeMessage", () => {
     expect(sessionStorage.getItem(WELCOME_SESSION_KEY)).toBe("1");
   });
 
-  it("does not dismiss or consume the session when clicking inside the dialog", async () => {
+  it("does not dismiss when clicking inside the dialog", async () => {
     render(<WelcomeMessage pathname="/" />);
     await waitFor(expectWelcomeVisible);
     const dialog = screen.getByRole("dialog", { name: dialogName });

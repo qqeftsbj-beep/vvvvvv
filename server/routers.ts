@@ -1,3 +1,4 @@
+import { welcomeRouter } from "./welcomeRouter";
 import { buildPublicationChanges } from "./workspacePublicationSummary";
 import { z } from "zod";
 import type { PageMedia } from "@shared/pageMedia";
@@ -231,6 +232,7 @@ function siteFileName(name: string) {
 }
 
 export const appRouter = router({
+  welcome: welcomeRouter,
   system: systemRouter,
   sharedContent: router({
     revision: publicProcedure.query(() => getSharedContentRevision()),

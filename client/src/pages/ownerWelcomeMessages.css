@@ -1,0 +1,29 @@
+.owner-welcome-manager{min-width:0;color:var(--ink,#f7f3ea)}
+.owner-welcome-help,.owner-welcome-settings p{font-size:12px;line-height:1.9;margin:8px 0 16px;overflow-wrap:anywhere}
+.owner-welcome-manager fieldset{border:0;padding:0;min-width:0;margin:0}
+.owner-welcome-settings{background:var(--card,#0d1d35);padding:16px!important;border-radius:12px}
+.owner-welcome-simulator,.owner-welcome-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.owner-welcome-simulator>div{display:flex;flex-direction:column;align-items:start;gap:8px}
+.owner-welcome-list{display:grid;gap:12px;margin-top:18px}
+.owner-welcome-card{border:1px solid var(--border,#294366);border-radius:12px;overflow:hidden;background:var(--card,#0d1d35)}
+.owner-welcome-card>summary{display:flex;align-items:center;gap:10px;padding:14px;cursor:pointer;list-style:none}
+.owner-welcome-card>summary strong{flex:1;color:var(--gold,#d9b86c);overflow-wrap:anywhere}
+.owner-welcome-card>summary small{font-size:11px;flex-shrink:0}
+.owner-welcome-number{font-size:12px;border:1px solid var(--border,#294366);border-radius:6px;padding:2px 8px}
+.owner-welcome-fields{padding:14px!important}
+.owner-welcome-manager .owner-item-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.owner-welcome-manager .owner-item-toolbar button,.owner-welcome-simulator button,.owner-welcome-image button{min-height:44px;padding:8px 12px;border:1px solid var(--border,#294366);border-radius:8px;background:var(--panel,#13243d);color:var(--ink,#f7f3ea);font-size:12px;white-space:normal}
+.owner-welcome-manager .owner-item-toolbar .owner-delete{color:#ef9a9a}
+.owner-welcome-manager label{display:flex;flex-direction:column;gap:7px;font-size:12px;min-width:0}
+.owner-welcome-manager label span{font-weight:700}
+.owner-welcome-manager input:not([type=checkbox]):not([type=color]),.owner-welcome-manager textarea,.owner-welcome-manager select{width:100%;max-width:100%;min-width:0;min-height:44px;padding:10px;border:1px solid var(--border,#294366);border-radius:8px;background:var(--background,#071426);color:var(--ink,#f7f3ea);font:inherit}
+.owner-welcome-manager textarea{resize:vertical}
+.owner-welcome-manager input[type=checkbox]{width:20px;height:20px;flex-shrink:0;accent-color:#d9b86c}
+.owner-welcome-manager .owner-welcome-toggle{flex-direction:row;align-items:center;min-height:44px}
+.owner-welcome-wide{grid-column:1/-1}
+.owner-welcome-colors,.owner-welcome-days{display:flex;flex-wrap:wrap;gap:14px}
+.owner-welcome-colors input[type=color]{width:64px;height:40px;padding:2px;border-radius:6px;border:1px solid #294366;background:transparent}
+.owner-welcome-days label{flex-direction:row;align-items:center;min-height:44px}
+.owner-welcome-image img{display:block;max-width:100%;max-height:180px;object-fit:contain;margin-bottom:10px}
+.owner-welcome-manager button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:640px){.owner-welcome-grid,.owner-welcome-simulator{grid-template-columns:minmax(0,1fr)}.owner-welcome-card>summary{padding:12px}.owner-welcome-manager .owner-card-heading{align-items:start;gap:10px;flex-wrap:wrap}}

@@ -1,3 +1,4 @@
+import { welcomeConfigSchema } from "../shared/welcomeSchedule";
 import { desc, eq, inArray } from "drizzle-orm";
 import { siteContentVersions, siteSettings } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -107,6 +108,9 @@ async function uploadKnownImages(content: JsonRecord): Promise<JsonRecord> {
       if (isRecord(product)) product.image = await uploadImage(product.image, `product-${index}-${storageName(product.image, "image")}`, `products[${index}].image`);
     }
   }
+  if (isRecord(next.welcome) && Array.isArray(next.welcome.templates)) {
+    for (const template of next.welcome.templates) if (isRecord(template)) template.image = await uploadImage(template.image, `welcome-${storageName(template.id, "template")}`, "صورة رسالة الترحيب");
+  }
   if (Array.isArray(next.pages)) {
     for (let pageIndex = 0; pageIndex < next.pages.length; pageIndex += 1) {
       const page = next.pages[pageIndex];
@@ -130,6 +134,11 @@ async function uploadKnownImages(content: JsonRecord): Promise<JsonRecord> {
 export async function normalizeAndUploadSiteContent(content: JsonRecord): Promise<JsonRecord> {
   const cloned = cloneJson(content);
   if (!isRecord(cloned)) throw new SiteContentValidationError("Site content must be an object.");
+  if (cloned.welcome !== undefined) {
+    const checked = welcomeConfigSchema.safeParse(cloned.welcome);
+    if (!checked.success) throw new SiteContentValidationError(checked.error.issues[0]?.message || "إعدادات الترحيب غير صحيحة.");
+    cloned.welcome = checked.data;
+  }
   assertKnownUrls(cloned);
   return uploadKnownImages(cloned);
 }

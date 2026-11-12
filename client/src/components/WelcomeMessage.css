@@ -1,10 +1,13 @@
-.owner-modal-dialog.welcome-message{width:min(440px,100%)}
-.welcome-message .owner-modal-top{gap:10px}
-.welcome-message .owner-modal-top h2{font-size:16px}
-.welcome-message .owner-modal-top>button{min-width:44px;min-height:44px;color:#fff;border-color:#d9b86c}
+.owner-modal-dialog.welcome-message{width:min(440px,100%);background:var(--welcome-bg,#0d1d35);color:var(--welcome-fg,#f7f3ea);border-color:var(--welcome-accent,#d9b86c)}
+.welcome-message .owner-modal-top{gap:10px;background:var(--welcome-bg,#0d1d35);border-color:var(--welcome-accent,#d9b86c)}
+.welcome-message .owner-modal-top h2{font-size:16px;color:var(--welcome-accent,#d9b86c)}
+.welcome-message .owner-modal-top>button{min-width:44px;min-height:44px;color:var(--welcome-fg,#f7f3ea);border-color:var(--welcome-accent,#d9b86c);background:var(--welcome-bg,#0d1d35)}
 .welcome-message .owner-modal-content{font-size:14px;line-height:1.9;overflow-wrap:anywhere}
-.welcome-message .owner-modal-content p{margin:0 0 12px;color:#c7d2e2}
-.welcome-message .owner-modal-content .welcome-message-intro{font-weight:700;color:#f7f3ea}
-.welcome-message .welcome-message-continue{width:100%;min-height:44px;margin-top:6px;padding:10px 16px;border:1px solid #e8ca83;border-radius:10px;background:#d9b86c;color:#071426;font-weight:700}
-.welcome-message button:focus-visible{outline:2px solid #f7f3ea;outline-offset:3px}
+.welcome-message .owner-modal-content p{margin:0 0 12px;color:var(--welcome-fg,#f7f3ea)}
+.welcome-message .owner-modal-content .welcome-message-intro{font-weight:700}
+.welcome-message-body{white-space:pre-wrap}
+.welcome-message .welcome-message-continue{display:block;text-align:center;text-decoration:none;width:100%;min-height:44px;margin-top:6px;padding:10px 16px;border:1px solid var(--welcome-accent,#d9b86c);border-radius:10px;background:var(--welcome-accent,#d9b86c);color:#071426;font-weight:700}
+.welcome-message button:focus-visible,.welcome-message a:focus-visible{outline:2px solid var(--welcome-fg,#f7f3ea);outline-offset:3px}
+.welcome-message-image{display:block;width:100%;height:auto;max-height:300px;object-fit:contain;margin-bottom:12px;border-radius:8px}
+.welcome-preview-label{display:block;margin-top:12px}
 @media(max-width:600px){.welcome-message .owner-modal-top h2{font-size:14px}.welcome-message .owner-modal-content{font-size:13px}}

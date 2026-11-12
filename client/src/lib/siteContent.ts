@@ -1,3 +1,4 @@
+import { defaultWelcomeConfig, type WelcomeConfig } from "@shared/welcomeSchedule";
 import type { PageMedia } from "@shared/pageMedia";
 /*
   Shared editable site model for the owner control room.
@@ -116,6 +117,7 @@ export type EditablePageBlock = {
 export type CustomCode = { html: string; css: string; js: string; enabled: boolean };
 
 export type SiteContent = {
+  welcome: WelcomeConfig;
   heroEyebrow: string;
   heroTitle: string;
   heroAccent: string;
@@ -136,6 +138,7 @@ export type SiteContent = {
 export const SITE_CONTENT_KEY = "abu-kayan-site-content";
 
 export const defaultSiteContent: SiteContent = {
+  welcome: defaultWelcomeConfig,
   heroEyebrow: "استوديو أبو كيان / اليمن",
   heroTitle: "نخلي فكرتك",
   heroAccent: "تُرى",
@@ -280,6 +283,7 @@ export function normalizeSiteContent(value: unknown): SiteContent {
     products: Array.isArray(saved.products) ? saved.products : defaultSiteContent.products,
     buttons: migratedButtons,
     pages: Array.isArray(saved.pages) ? saved.pages : defaultSiteContent.pages,
+    welcome: saved.welcome ?? defaultWelcomeConfig,
     settings: { ...defaultSiteContent.settings, ...(saved.settings || {}) },
     // Spread the saved object so optional/future code metadata is not discarded.
     customCode: { ...defaultSiteContent.customCode, ...savedCode, html: typeof savedCode.html === "string" ? savedCode.html : "", css: typeof savedCode.css === "string" ? savedCode.css : "", js: typeof savedCode.js === "string" ? savedCode.js : "", enabled: savedCode.enabled === true },

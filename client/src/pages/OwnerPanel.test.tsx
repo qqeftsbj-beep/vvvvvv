@@ -75,10 +75,12 @@ describe("OwnerPanel organization", () => {
     expect(screen.getByText("المظهر العام")).toBeTruthy();
     expect(screen.getByText("مراجعة المشاركات")).toBeTruthy();
     const sections = Array.from(document.querySelectorAll("details.owner-panel-section"));
-    expect(sections).toHaveLength(13);
+    expect(sections).toHaveLength(14);
     expect(sections[0].hasAttribute("open")).toBe(true);
     expect(sections.slice(1).every((section) => !section.hasAttribute("open"))).toBe(true);
     expect(screen.getByRole("tablist", { name: "أقسام لوحة التحكم" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "الترحيب والجدولة" }));
+    expect(screen.getByRole("heading", { name: "الترحيب والقوالب المجدولة" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "إدارة الصفحات" }));
     expect((sections.find((section) => section.id === "owner-pages") as HTMLDetailsElement | undefined)?.hidden).toBe(false);
     expect(screen.getByRole("heading", { name: /أنشئ صفحاتك وانشرها/ })).toBeTruthy();
