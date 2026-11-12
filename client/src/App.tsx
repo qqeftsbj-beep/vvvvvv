@@ -8,7 +8,8 @@ import { useSharedContentSync } from "@/hooks/useSharedContentSync";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
+import WelcomeMessage from "./components/WelcomeMessage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -21,9 +22,10 @@ const CreativeSpace = lazy(() => import("./pages/CreativeSpace"));
 const CustomPage = lazy(() => import("./pages/CustomPage"));
 function Router() {
   useSharedContentSync();
+  const [pathname] = useLocation();
   // make sure to consider if you need authentication for certain routes
   return (
-    <Suspense fallback={<div dir="rtl" className="container py-12" role="status">جارٍ فتح الصفحة…</div>}><Switch>
+    <><WelcomeMessage pathname={pathname} /><Suspense fallback={<div dir="rtl" className="container py-12" role="status">جارٍ فتح الصفحة…</div>}><Switch>
       <Route path="/" component={Home} />
       <Route path="/owner" component={OwnerPanel} />
       <Route path="/owner/preview" component={OwnerPreview} />
@@ -39,7 +41,7 @@ function Router() {
       </Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
-    </Switch></Suspense>
+    </Switch></Suspense></>
   );
 }
 
